@@ -2,6 +2,11 @@ from student_code.simple_baseline_net import SimpleBaselineNet
 from student_code.experiment_runner_base import ExperimentRunnerBase
 from student_code.vqa_dataset import VqaDataset
 
+import torch.nn.functional as F
+import cv2
+import numpy as np
+import torch
+import torch.nn as nn
 
 class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
@@ -21,9 +26,17 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                  image_filename_pattern="COCO_val2014_{}.jpg")
 
         model = SimpleBaselineNet()
-
+        
+        self._optimizer = torch.optim.SGD([{'params':self._model.word_feats.parameters(), 'lr':0.01}, {'params':[self._model.image_cnn.parameters(), self._model.softmax.parameters()]}], lr=0.0001, momentum=0.9, weight_decay=0.0005)
+        
         super().__init__(train_dataset, val_dataset, model, batch_size, num_epochs, num_data_loader_workers)
 
-    def _optimize(self, predicted_answers, true_answer_ids):
+    def _optimize(self, predicted_answers, true_answers):
+        #Assume predicted_answers is list of answers
         # TODO
-        raise NotImplementedError()
+        predicted_max_indices = predicted_answers.max(1)[1]   
+        loss = F.cross_entropy(predicted_max_indices, true_answers)
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
+        return self._optimizer, loss

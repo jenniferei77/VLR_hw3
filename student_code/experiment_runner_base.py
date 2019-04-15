@@ -1,6 +1,13 @@
 from torch.utils.data import DataLoader
 import torch
-
+from torch.utils.data.sampler import SubsetRandomSampler
+import numpy as np
+from torchvision import transforms
+from torchvision import datasets
+import sklearn.metrics
+from datetime import datetime
+import random
+import pdb
 
 class ExperimentRunnerBase(object):
     """
@@ -14,11 +21,25 @@ class ExperimentRunnerBase(object):
         self._log_freq = 10  # Steps
         self._test_freq = 250  # Steps
 
-        self._train_dataset_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_data_loader_workers)
+        train_length = len(train_dataset)
+        indices = list(range(train_length))
+        split_set = int(np.floor(0.15 * train_length))
+        random_seed = 9999
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+        train_indices, val_indices = indices[split_set:], indices[:split_set]
+        train_sampler = SubsetRandomSampler(train_indices)
+        val_sampler = SubsetRandomSampler(val_indices)
+        
+        self._train_dataset_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, shuffle=True, num_workers=num_data_loader_workers)
 
         # If you want to, you can shuffle the validation dataset and only use a subset of it to speed up debugging
-        self._val_dataset_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_data_loader_workers)
-
+         
+        self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, shuffle=True, num_workers=num_data_loader_workers)
+        
+        self._date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self._writer = SummaryWriter('./tensorboard_output/' + date_time
+ 
         # Use the GPU if it's available.
         self._cuda = torch.cuda.is_available()
 
@@ -33,33 +54,47 @@ class ExperimentRunnerBase(object):
 
     def validate(self):
         # TODO. Should return your validation accuracy
-        raise NotImplementedError()
+        aps = []
+        for batch_id, (questions, images, answers) in enumerate(self._val_dataset_loader):
+            self._model.eval()
+            aps = []
+            predicted_answers = self._model(images, questions) 
+            predicted_max_indices = predicted_answers.max(1)[1]
+            predicted_max_indices.view(answers.shape)
+            for index in range(answers.shape[-1]):
+                predicted = predicted_max_indices[index]
+                target = answers[index]
+                ap = sklearn.metrics.average_precision_score(target, predicted) 
+                aps.append(ap)
+        mAP = np.nanmean(aps)   
+        return mAP
 
     def train(self):
-
+        optimizer = self._optimizer 
         for epoch in range(self._num_epochs):
             num_batches = len(self._train_dataset_loader)
 
-            for batch_id, batch_data in enumerate(self._train_dataset_loader):
+            for batch_id, (questions, images, answers) in enumerate(self._train_dataset_loader):
                 self._model.train()  # Set the model to train mode
                 current_step = epoch * num_batches + batch_id
 
                 # ============
                 # TODO: Run the model and get the ground truth answers that you'll pass to your optimizer
                 # This logic should be generic; not specific to either the Simple Baseline or CoAttention.
-                predicted_answer = None # TODO
-                ground_truth_answer = None # TODO
+                
+                predicted_answer = self._model(images, questions)
                 # ============
 
                 # Optimize the model according to the predictions
-                loss = self._optimize(predicted_answer, ground_truth_answer)
-
+                optimizer, loss = self._optimize(predicted_answer, answers)
                 if current_step % self._log_freq == 0:
                     print("Epoch: {}, Batch {}/{} has loss {}".format(epoch, batch_id, num_batches, loss))
                     # TODO: you probably want to plot something here
+                    writer.add_scalar('train/loss', loss.item(), batch_id)
 
                 if current_step % self._test_freq == 0:
                     self._model.eval()
                     val_accuracy = self.validate()
                     print("Epoch: {} has val accuracy {}".format(epoch, val_accuracy))
                     # TODO: you probably want to plot something here
+                    writer.add_scalar('test/accuracy', val_accuracy, batch_id)

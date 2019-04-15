@@ -2,7 +2,7 @@ import unittest
 import os
 from torch.utils.data import DataLoader
 from student_code.vqa_dataset import VqaDataset
-
+import pdb
 
 class TestVqaDataset(unittest.TestCase):
 
@@ -16,7 +16,6 @@ class TestVqaDataset(unittest.TestCase):
         current_dir = os.path.dirname(__file__)
         question_file = os.path.join(current_dir, "test_questions.json")
         annotation_file = os.path.join(current_dir, "test_annotations.json")
-
         vqa_dataset = VqaDataset(question_json_file_path=question_file,
                                  annotation_json_file_path=annotation_file,
                                  image_dir=current_dir,
@@ -38,7 +37,7 @@ class TestVqaDataset(unittest.TestCase):
         current_dir = os.path.dirname(__file__)
         question_file = os.path.join(current_dir, "test_questions.json")
         annotation_file = os.path.join(current_dir, "test_annotations.json")
-
+        
         vqa_dataset = VqaDataset(question_json_file_path=question_file,
                                  annotation_json_file_path=annotation_file,
                                  image_dir=current_dir,
