@@ -6,6 +6,7 @@ from torchvision import transforms
 from torchvision import datasets
 import sklearn.metrics
 from datetime import datetime
+from tensorboardX import SummaryWriter
 import random
 import pdb
 
@@ -38,7 +39,7 @@ class ExperimentRunnerBase(object):
         self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, shuffle=True, num_workers=num_data_loader_workers)
         
         self._date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        self._writer = SummaryWriter('./tensorboard_output/' + date_time
+        self._writer = SummaryWriter('./tensorboard_output/' + date_time)
  
         # Use the GPU if it's available.
         self._cuda = torch.cuda.is_available()

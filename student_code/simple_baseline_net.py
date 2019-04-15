@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 from external.googlenet.googlenet import GoogLeNet
 
 
@@ -15,7 +16,7 @@ class SimpleBaselineNet(nn.Module):
         self.image_cnn = GoogLeNet()
 
         #Classify:
-        self.classifier = nn.Linear(in_features=self.num_classes*2, self.num_classes)
+        self.classifier = nn.Linear(self.num_classes*2, self.num_classes)
         self.softmax = nn.Softmax()
 
     def forward(self, image, question_encoding):

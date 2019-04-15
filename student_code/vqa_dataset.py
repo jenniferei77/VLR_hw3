@@ -10,7 +10,7 @@ import cv2
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import cPickle as pkl
+import pickle as pkl
 import pdb
 
 def pil_loader(path):
@@ -83,7 +83,7 @@ class VqaDataset(Dataset):
     want to reference the full repo (https://github.com/GT-Vision-Lab/VQA) for usage examples.
     """
 
-    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transforms=None, omit_words=None):
+    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transform=None, omit_words=None):
         """
         Args:
             image_dir (string): Path to the directory with COCO images
@@ -100,22 +100,20 @@ class VqaDataset(Dataset):
             print('imvalid image_file_pattern')
             exit(1)
         
-        if omit_words=None:
+        if omit_words is None:
             self.omit_words = ['the', 'a', 'so', 'her', 'him', 'very', 'an', 'this', 'are', 'does', 'will', 'i']
         else:
             self.omit_words = omit_words
-         
+       
+        if transform is not None:
+            self.transforms = transform
         im_type = image_filename_pattern.split('.')[-1]
-        if transforms=None:
-            self.transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.224, 0.225]))
-        else:
-            self.transform = transforms
 
         self.images = {}
         
         self.image_dir = image_dir
         vqa = VQA(annotation_json_file_path, question_json_file_path)
-        self.VQA = vqa.copy()
+        self.VQA = vqa
 
         if not image_dir == None:
             print('Loading COCO images and question data')
@@ -127,9 +125,8 @@ class VqaDataset(Dataset):
                     im_index = image_files.split('.')[-2].split('_')[-1]
                     im_index = im_index.lstrip('0')
                     loaded_img = default_loader(filename)
-                    pdb.set_trace()
                     if loaded_img is not None:
-                        image = transform(loaded_img)
+                        image = self.transforms(loaded_img)
                         images[im_index] = image
                 self.images = images
             except OSError:
@@ -220,5 +217,4 @@ class VqaDataset(Dataset):
         answer_encoded = get_encoding(self.a_corpus, answer)
         return {"question":question_encoded, "image":image, "answer":answer_encoded}
 
-    def preprocess(self):
                 
