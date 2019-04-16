@@ -39,7 +39,7 @@ class ExperimentRunnerBase(object):
         self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, shuffle=True, num_workers=num_data_loader_workers)
         
         self._date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        self._writer = SummaryWriter('./tensorboard_output/' + date_time)
+        self._writer = SummaryWriter('./tensorboard/' + date_time)
  
         # Use the GPU if it's available.
         self._cuda = torch.cuda.is_available()
@@ -91,11 +91,11 @@ class ExperimentRunnerBase(object):
                 if current_step % self._log_freq == 0:
                     print("Epoch: {}, Batch {}/{} has loss {}".format(epoch, batch_id, num_batches, loss))
                     # TODO: you probably want to plot something here
-                    writer.add_scalar('train/loss', loss.item(), batch_id)
+                    self._writer.add_scalar('train/loss', loss.item(), batch_id)
 
                 if current_step % self._test_freq == 0:
                     self._model.eval()
                     val_accuracy = self.validate()
                     print("Epoch: {} has val accuracy {}".format(epoch, val_accuracy))
                     # TODO: you probably want to plot something here
-                    writer.add_scalar('test/accuracy', val_accuracy, batch_id)
+                    self._writer.add_scalar('test/accuracy', val_accuracy, batch_id)
