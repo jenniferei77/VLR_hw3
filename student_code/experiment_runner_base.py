@@ -55,6 +55,7 @@ class ExperimentRunnerBase(object):
         self._clip_freq = 5 # Steps
         self._word_lr = 0.8
         self._other_lr = 0.01
+        self._corpus_length = 1000
 
         train_length = len(train_dataset)
         indices = list(range(train_length))

@@ -30,7 +30,7 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
     def __init__(self, train_image_dir, train_question_path, train_annotation_path,
                  test_image_dir, test_question_path,test_annotation_path, batch_size, num_epochs,
-                 num_data_loader_workers):
+                 num_data_loader_workers, corpus_length=1000):
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         
@@ -38,20 +38,12 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                    question_json_file_path=train_question_path,
                                    annotation_json_file_path=train_annotation_path,
                                    image_filename_pattern="COCO_train2014_{}.jpg",
-                                   transform=transforms.Compose([
-                                       transforms.Resize((224, 224)),
-                                       transforms.ToTensor(),
-                                       normalize,
-                                   ]))
+                                   corpus_length=corpus_length)
         val_dataset = VqaDataset(image_dir=test_image_dir,
                                  question_json_file_path=test_question_path,
                                  annotation_json_file_path=test_annotation_path,
                                  image_filename_pattern="COCO_val2014_{}.jpg",
-                                 transform=transforms.Compose([
-                                     transforms.Resize((224, 224)),
-                                     transforms.ToTensor(),
-                                     normalize,
-                                 ]))
+                                 corpus_length=corpus_length)
  
         model = SimpleBaselineNet()
         word_params = []
