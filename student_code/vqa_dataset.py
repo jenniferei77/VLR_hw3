@@ -73,11 +73,11 @@ def get_encoding(vocab_corpus, sentence):
             index = 0
         encoded_sentence.append(index)
         
-    return torch.tensor((np.asarray(encoded_sentence).astype(np.int32)))
+    return torch.tensor((np.asarray(encoded_sentence).astype(np.int)))
 
 def pad_question(max_length, question):
     diff = max_length - len(question)
-    zeros = torch.zeros([diff], dtype=torch.int32)
+    zeros = torch.zeros([diff], dtype=torch.long)
     return torch.cat((question, zeros), 0)
 
 class VqaDataset(Dataset):
@@ -95,10 +95,10 @@ class VqaDataset(Dataset):
                 answers together
             image_filename_pattern (string): The pattern the filenames of images in this dataset use (eg "COCO_train2014_{}.jpg")
         """
-        if "COCO_train2014_" in image_filename_pattern:
+        if "COCO_train2014" in image_filename_pattern:
             images_prefix = "COCO_train2014_"
-        elif "COCO_eval2014" in image_filename_pattern:
-            images_prefix = "COCO_eval2014_"
+        elif "COCO_val2014" in image_filename_pattern:
+            images_prefix = "COCO_val2014_"
         else:
             print('imvalid image_file_pattern')
             exit(1)
@@ -115,6 +115,7 @@ class VqaDataset(Dataset):
         else:
             self.transforms = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
         
+        self.num_images_cap = 500 
         self.images = {}
         im_type = image_filename_pattern.split('.')[-1]
         self.image_dir = image_dir
@@ -127,16 +128,22 @@ class VqaDataset(Dataset):
             
             try:
                 image_files = image_dir + '/' + images_prefix + '*.' + im_type
-                print("Image Files: ", image_files)
+                #print("Image Files: ", image_files)
+                num_images = 0
                 for filename in glob.glob(image_files):
-                    print("Image Filename: ", filename)
+                    #print("Image Filename: ", filename)
+                    num_images += 1
+                    if num_images % 100 == 0:
+                        print(num_images)
+                    if num_images > self.num_images_cap:
+                        continue
                     im_index = filename.split('.')[-2].split('_')[-1]
                     im_index = im_index.lstrip('0')
                     loaded_img = default_loader(filename)
                     if loaded_img is not None:
                         image = self.transforms(loaded_img)
                         images[int(im_index)] = image
-                        print("Image loaded correctly with index", im_index)
+                        #print("Image loaded correctly with index", im_index)
                     else:
                         print("Image not loaded correctly")
                 self.images = images
@@ -150,6 +157,10 @@ class VqaDataset(Dataset):
             qIdToAns = {}
             qIdToEncoding = {}
             for q_id in q_ids:
+                #Image debugging, don't use for final training
+                image_index = vqa.qqa[q_id]['image_id']
+                if image_index not in images.keys():
+                    continue     
                 #Build question corpus by frequency 
                 question = vqa.qqa[q_id]['question']
                 q_words = separate(question)
@@ -215,7 +226,7 @@ class VqaDataset(Dataset):
 
     def __getitem__(self, idx):
         vqa = self.VQA
-        q_ids = vqa.getQuesIds()
+        q_ids = list(self.qIdToAns.keys())
         q_id = q_ids[idx]
         im_id = vqa.qqa[q_id]['image_id']
         question = vqa.qqa[q_id]['question']
@@ -226,10 +237,10 @@ class VqaDataset(Dataset):
         answer = self.qIdToAns[q_id]
         #print ("Actual Answer: ", answer)
         answer_encoded = get_encoding(self.a_corpus, answer)
-        #print("Image: ", image)
-        #print("Question: ", question_encoded)
-        #print("Answer: ", answer_encoded)
+        print("Image: ", image.shape)
+        print("Question: ", question_encoded)
+        print("Answer: ", answer_encoded)
+        question_length = len(question_encoded)
         #pdb.set_trace()
-        return {"question":question_padded, "image":image, "answer":answer_encoded, "question_length":len(question_encoded)}
+        return question_padded, image, answer_encoded, question_length
 
-                

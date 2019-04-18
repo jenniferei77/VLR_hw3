@@ -10,6 +10,19 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
+import pdb
+
+#class Clipper(object):
+#    def __init__(self, frequency=5):
+#        self.frequency = frequency
+#    def __call__(self, module, w_clip):
+#        if hasattr(module, 'weight'):
+#            weight = module.weight.data
+#            if hasattr(module, 'word'):
+#                w_clip = 1500
+#            else:
+#                w_clip = 20
+#            weight.mul_(w_clip/weight)
 
 class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
@@ -41,8 +54,17 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                  ]))
  
         model = SimpleBaselineNet()
+        word_params = []
+        other_params = []
+        for param in model.state_dict().keys():
+            if 'word_feats' in param:
+                word_params.append(model.state_dict()[param])
+            else:
+                other_params.append(model.state_dict()[param])
         
-        self._optimizer = torch.optim.SGD([{'params':self._model.word_feats.parameters(), 'lr':0.01}, {'params':[self._model.image_cnn.parameters(), self._model.softmax.parameters()]}], lr=0.0001, momentum=0.9, weight_decay=0.0005)
+        self._optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
+        
+#        self._optimizer = torch.optim.SGD([{'params':model.word_feats.parameters(), 'lr':0.01}, {'params':[model.image_feats.parameters(), model.classifier.parameters()]}], lr=0.0001, momentum=0.9, weight_decay=0.0005)
         
         super().__init__(train_dataset, val_dataset, model, batch_size, num_epochs, num_data_loader_workers)
 
