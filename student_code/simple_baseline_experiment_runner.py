@@ -74,7 +74,4 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
         predicts_bounded = torch.sigmoid(predicted_answers)
         true_indices = torch.max(true_answers, 1)[1]
         loss = F.cross_entropy(predicts_bounded, true_indices.cuda(async=True))
-        self._optimizer.zero_grad()
-        loss.backward()
-        self._optimizer.step()
-        return self._optimizer, loss
+        return loss

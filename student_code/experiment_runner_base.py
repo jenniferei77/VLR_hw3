@@ -107,28 +107,16 @@ class ExperimentRunnerBase(object):
             truth_max_indices = truth_max_indices.detach().cpu().numpy()
             accuracy = (truth_max_indices == predicted_max_indices).sum() / truth_max_indices.shape[0]
             aps.append(accuracy)
-            pdb.set_trace() 
-            #for index in range(answers.shape[0]):
-            #    predicted = predicts_bounded[index].detach().cpu().numpy()
-            #    target = answers[index].detach().cpu().numpy()
-            #    #predicts_binary = np.zeros(self._corpus_length)
-            #    #predicts_binary[predicted] = 1
-            #    targets_binary = np.zeros(self._corpus_length)
-            #    targets_binary[target] = 1
-            #    pdb.set_trace()
-            #    ap = sklearn.metrics.average_precision_score(targets_binary, predicted) 
-            #    aps.append(ap)
             if batch_id % iter_prints == 0:
                 iter_frac += 1
                 print(str(iter_frac) + "/10 done!")
                 interim_mAP = np.nanmean(aps)
                 print("Interim mAP: ", interim_mAP)
-        mAP = np.nanmean(accuracy)   
+        mAP = np.nanmean(aps)   
         return mAP
 
     def train(self):
-        optimizer = self._optimizer 
-        clipper = Clipper()
+        #clipper = Clipper()
         for epoch in range(self._num_epochs):
             num_batches = len(self._train_dataset_loader)
             for batch_id, data in enumerate(self._train_dataset_loader):
@@ -148,8 +136,10 @@ class ExperimentRunnerBase(object):
                 # ============
                 
                 # Optimize the model according to the predictions
-                optimizer, loss = self._optimize(predicted_answer, answers)
-                
+                loss = self._optimize(predicted_answer, answers)
+                self._optimizer.zero_grad()
+                loss.backward()
+                self._optimizer.step()               
                 #if current_step % self._clip_freq == 0:
                 #    self._model.apply(clipper)
                 if current_step % self._log_freq == 0:
@@ -162,3 +152,5 @@ class ExperimentRunnerBase(object):
                     print("Epoch: {} has val accuracy {}".format(epoch, val_accuracy))
                     # TODO: you probably want to plot something here
                     self._writer.add_scalar('test/accuracy', val_accuracy, batch_id)
+
+

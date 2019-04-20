@@ -55,7 +55,6 @@ class SimpleBaselineNet(nn.Module):
         full_features = torch.cat((word_features, image_features), dim=1)
         
         score = self.classifier(full_features)
-        pdb.set_trace() 
         return torch.clamp(score, 0, 1)
 
 class WordFeaturesBinary(nn.Module):
