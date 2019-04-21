@@ -30,7 +30,7 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
     def __init__(self, train_image_dir, train_question_path, train_annotation_path,
                  test_image_dir, test_question_path, test_annotation_path, loaded_question_corpus, loaded_answer_corpus, train_best_answers_filepath, val_best_answers_filepath, batch_size, num_epochs,
-                 num_data_loader_workers, corpus_length=1000):
+                 num_data_loader_workers=10, corpus_length=1000):
 
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         
@@ -52,26 +52,24 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                  best_answers_filepath=val_best_answers_filepath,
                                  corpus_length=corpus_length)
  
-        model = SimpleBaselineNet(corpus_length=corpus_length)
+        model = SimpleBaselineNet(corpus_length=len(train_dataset.question_corpus))
+        model.cuda()
         word_params = []
         other_params = []
-        for param in model.state_dict().keys():
-            if 'lin_word_net' in param:
-                word_params.append(model.state_dict()[param])
-            elif 'classifier' in param:
-                other_params.append(model.state_dict()[param])
-        
-        optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
-        
-#        self._optimizer = torch.optim.SGD([{'params':model.word_feats.parameters(), 'lr':0.01}, {'params':[model.image_feats.parameters(), model.classifier.parameters()]}], lr=0.0001, momentum=0.9, weight_decay=0.0005)
-        
+        #for param in model.state_dict().keys():
+        #    if 'lin_word_net' in param:
+        #        word_params.append(model.state_dict()[param])
+        #    elif 'classifier' in param:
+        #        other_params.append(model.state_dict()[param])
+        #optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
+        optimizer = None
         super().__init__(train_dataset, val_dataset, model, optimizer, batch_size, num_epochs, num_data_loader_workers)
 
-    def _optimize(self, predicted_answers, true_answers):
-        #Assume predicted_answers is list of answers
+    def _calc_loss(self, predicted_answers, true_answers):
         # TODO
-        #predicted_max_indices = predicted_answers.max(1)[1]
-        predicts_bounded = torch.sigmoid(predicted_answers)
-        true_indices = torch.max(true_answers, 1)[1]
-        loss = F.cross_entropy(predicts_bounded, true_indices.cuda(async=True))
+        # predicted_answers: Nx1000 of predictions for each word
+        # true_answers: 1000 of gt_answer indices
+        predicted_answers = torch.max(predicted_answers, 1)[1]
+        loss = F.cross_entropy(predicted_answers, true_answers.view(true_answers.size()[0]).cuda(async=True))
         return loss
+

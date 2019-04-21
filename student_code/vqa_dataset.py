@@ -113,7 +113,7 @@ class VqaDataset(Dataset):
         self.best_answers_filepath = best_answers_filepath
         self.max_question_length = max_question_length
         self.corpus_length = corpus_length
-        self.num_debug_images = None
+        self.num_debug_questions = 10
         self.dataset_type = ''
         
         self.imgToQA = {}
@@ -157,9 +157,12 @@ class VqaDataset(Dataset):
         qIdToBestA = {}
 
         if self.loaded_question_corpus == None or self.loaded_answer_corpus == None or self.best_answers_filepath == None:
-            
+             
             #Make Question and Answer Corpuses
-            for q_id in self.qIdToA.keys():
+            qIds_to_add = self.qIdToA.keys()
+            if self.num_debug_questions:
+                qIds_to_add = [*self.qIdToA.keys()][0:self.num_debug_questions]
+            for q_id in qIds_to_add:
                 #Image debugging, don't use for final training
                 #image_index = self.qIdToQA[q_id]['image_id']
                 #if image_index not in self.imgIdToimg.keys():
@@ -171,16 +174,18 @@ class VqaDataset(Dataset):
                 q_corpus = add_to_corpus_freq(q_corpus, q_words, self.omit_words)
          
                 #Build answer corpus by frequency and find distinct answers
+                mc_answer = self.qIdToA[q_id]['multiple_choice_answer']
+                mc_words = separate(mc_answer)
+                a_corpus = add_to_corpus_freq(a_corpus, mc_words, self.omit_words)
                 answers = self.qIdToA[q_id]['answers']
                 distinct_answers = {}
                 for ans_cluster in answers:
-                    answer = ans_cluster['answer']
-                    if ans_cluster['answer_confidence'] != 'yes':
-                        continue
-         
                     #Build answer corpus by frequency
+                    answer = ans_cluster['answer']
                     a_words = separate(answer)
                     a_corpus = add_to_corpus_freq(a_corpus, a_words, self.omit_words)
+                    if ans_cluster['answer_confidence'] != 'yes':
+                        continue
          
                     #Build best answers
                     for a_word in a_words:
@@ -189,8 +194,9 @@ class VqaDataset(Dataset):
                         else:
                             distinct_answers[a_word] = 1
                 if not distinct_answers:
-                    mc_answer = self.qIdToA[q_id]['multiple_choice_answer']
-                    distinct_answers[mc_answer] = 1
+                    mc_words = separate(mc_answer)
+                    for word in mc_words:
+                        distinct_answers[word] = 1
                 
                 #Do majority vote across each question answer set
                 best_ans = list(distinct_answers.keys())[0]
@@ -199,7 +205,6 @@ class VqaDataset(Dataset):
                     if distinct_answers[ans] > best_ans_freq:
                         best_ans = ans
                         best_ans_freq = distinct_answers[ans]
-         
                 #Build dictionary of best answers (question Id int to answer string)
                 qIdToBestA[q_id] = best_ans
          
@@ -208,6 +213,7 @@ class VqaDataset(Dataset):
             if len(q_corpus_sorted) >= self.corpus_length:
                 q_corpus = q_corpus_sorted[-(self.corpus_length-1):]
             else:
+                self.corpus_length = len(q_corpus_sorted)
                 q_corpus = q_corpus_sorted
          
             #Sort answer corpus by frequency and take top 1000
@@ -246,11 +252,11 @@ class VqaDataset(Dataset):
         #print("Actual Question: ", question)
         question_encoded = get_encoding(self.question_corpus, question)
         #question_padded = pad_question(self.max_question_length, question_encoded)
-        question_binary = index_to_binary(self.corpus_length, question_encoded)
+        question_binary = index_to_binary(len(self.question_corpus), question_encoded)
         answer = self.qIdToBestA[q_id]
         #print ("Actual Answer: ", answer)
         answer_encoded = get_encoding(self.answer_corpus, answer)
-        answer_binary = index_to_binary(self.corpus_length, answer_encoded)
+        #answer_binary = index_to_binary(self.corpus_length, answer_encoded)
         question_length = torch.tensor([len(question_encoded)])
         
         im_type = self.image_filename_pattern.split('.')[-1]
@@ -266,5 +272,5 @@ class VqaDataset(Dataset):
         #print("Image size: ", image.shape)
         #print("Question size: ", question_binary.shape)
         #print("Answer size: ", answer_binary.shape)
-        return {'question':question_binary, 'image':image, 'answer':answer_binary, 'question_length':question_length}
+        return {'question':question_binary, 'image':image, 'answer':answer_encoded, 'question_length':question_length}
     

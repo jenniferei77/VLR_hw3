@@ -12,46 +12,22 @@ class SimpleBaselineNet(nn.Module):
     """
     def __init__(self, corpus_length=1000):
         super(SimpleBaselineNet, self).__init__()
-        #Features:
         self.corpus_length = corpus_length
-      
-        #self.word_feats = WordFeaturesIndexed(
-        #    max_question_length=self.max_question_length,
-        #    question_lengths=1000,
-        #    corpus_length=self.corpus_length
-        #)
 
-        #self.word_embedding = nn.Embedding(self.max_question_length, self.corpus_length)
+        #Word and Image Features:
         self.lin_word_net = nn.Linear(self.corpus_length, self.corpus_length)
-        #self.embed_word_net = nn.Embedding(self.max_question_length, self.corpus_length)
-        
-        #self.word_net = WordFeaturesBinary(
-        #    max_question_length=self.max_question_length,
-        #    corpus_length=self.corpus_length
-        #)
-
-        self.image_net = GoogLeNet(aux_logits=False)
-        #self.flatten_image = nn.Linear(3*self.corpus_length, self.corpus_length)
+        self.image_net = GoogLeNet(num_classes=self.corpus_length, transform_input=True)
 
         #Classify:
-        self.classifier = nn.Sequential(
-            nn.Linear(self.corpus_length*2, self.corpus_length),
-            nn.Softmax(dim=0),
-        )
+        self.classifier = nn.Linear(self.corpus_length*2, self.corpus_length)
 
     def forward(self, image, question_encodings, question_lengths):
         # TODO
-        #question_encodings = question_encodings.cuda(async=True)
         image = image.cuda(async=True)
         word_features = self.lin_word_net(question_encodings.type(torch.FloatTensor).cuda(async=True))
-        #word_features = self.word_net(question_encodings)
-        
-        #word_features = word_features.view(word_features.size()[0], -1)
         image_features = self.image_net(image)
-        #image_features = torch.stack(image_features)
-        #image_features = image_features.cuda(async=True)
-        #image_features = image_features.view(image_features.size()[0], -1)
-        #image_flat_features = self.flatten_image(image_features)
+        if self.training:
+            image_features = image_features[-1]
         full_features = torch.cat((word_features, image_features), dim=1)
         
         score = self.classifier(full_features)
