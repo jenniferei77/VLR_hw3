@@ -129,17 +129,25 @@ class CoattentionNet(nn.Module):
         self.tanh_sent = nn.Tanh()
     def _init_weights(self, weight):
         for w in weight.chunk(4, 0):
-            init.xavier_uniform(w) 
+            init.xavier_uniform_(w) 
 
     def forward(self, image, question_encoding, question_lengths):
         # TODO
+        # image = B x 3 x 224 x 224
+        # question_encoding = B x max_question_length x corpus_length
+        # question_lengths = B x 1
         pdb.set_trace()
         #Question Hierarchy
         word_embed = self.embedding(question_encoding.cuda(async=True)).unsqueeze(1)
+        word_embed = self.tanh1(self.dropout1(word_embed))
+        # word_embed = B x 1 x max_question_length x encode_size
         #word_embed = word_embed.view(self.max_question_length, self.embed_size, 1)
-        #word_embed = self.tanh(self.drop(word_embed))
         phrase_convs = [F.relu(conv1(word_embed)).squeeze(3) for conv1 in self.conv1s]
-        phrase_pooled = [F.max_pool1d(word, word.size(2)).squeeze(2) for word in phrase_convs]
+        phrase_convs.permute(2, 1, 0)
+        for filter in phrase_convs:
+            for word in filter:
+                F.max_pool1d(word, word.size(2)).squeeze(2)
+#        phrase_pooled = [[F.max_pool1d(word, word.size(2)).squeeze(2) for word in filter] for filter in phrase_convs]
         phrase_embed = torch.stack(phrase_pooled, 1)
         question_lengths = question_lengths.squeeze(1)
         #pack = pack_padded_sequence(phrase_embed, question_lengths, batch_first=True)

@@ -40,14 +40,22 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
  
         model = SimpleBaselineNet(corpus_length=len(train_dataset.question_corpus))
         model.cuda()
-        word_params = []
-        other_params = []
-        for param in model.state_dict().keys():
-            if 'lin_word_net' in param:
-                word_params.append(model.state_dict()[param])
-            elif 'classifier' in param:
-                other_params.append(model.state_dict()[param])
-        optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
+        
+        #word_params = []
+        #other_params = []
+        word_params = {}
+        other_params = {}
+        #optimize_params = model.state_dict()
+        for name, param in model.state_dict().items():
+            if isinstance(param, nn.Parameter):
+                param = param.data
+            if 'lin_word_net' in name:
+                word_params[name] = param
+                #word_params.append(torch.nn.Parameter(model.state_dict()[param], requires_grad=True))
+            elif 'classifier' in name:
+                other_params[name] = param
+                #other_params.append(torch.nn.Parameter(model.state_dict()[param], requires_grad=True))
+        optimizer = torch.optim.SGD([{'params': model.lin_word_net.parameters(), 'lr':0.8}, {'params': model.classifier.parameters()}], momentum=0.9, lr=0.01, weight_decay=0.0005)
         #optimizer = None
         super().__init__(train_dataset, val_dataset, model, optimizer, batch_size, num_epochs, num_data_loader_workers)
 
@@ -55,7 +63,6 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
         # TODO
         # predicted_answers: Nx1000 of predictions for each word
         # true_answers: 1000 of gt_answer indices
-        predicted_answers = torch.max(predicted_answers, 1)[1]
-        loss = F.cross_entropy(predicted_answers, true_answers.view(true_answers.size()[0]).cuda(async=True))
+        loss = F.cross_entropy(predicted_answers, true_answers.type(torch.LongTensor).view(true_answers.size()[0]).cuda(async=True))
         return loss
 

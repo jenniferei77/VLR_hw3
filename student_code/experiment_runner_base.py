@@ -173,6 +173,7 @@ class ExperimentRunnerBase(object):
         #optimizer_class = torch.optim.SGD(self._model.classifier.parameters(), 0.01, 0.9, 0.0005)
         criterion = nn.CrossEntropyLoss().cuda()
         end = time.time()
+        optimizer = self._optimizer
         #clipper = Clipper()
         for epoch in range(self._num_epochs):
             num_batches = len(self._train_dataset_loader)
@@ -181,7 +182,7 @@ class ExperimentRunnerBase(object):
                 data_time.update(time.time() - end)
 
                 questions = data['question'].type(torch.FloatTensor)
-                images = data['image'].type(torch.FloatTensor).cuda
+                images = data['image'].type(torch.FloatTensor)
                 answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
                 question_lengths = data['question_length'].type(torch.FloatTensor)
 
@@ -193,20 +194,20 @@ class ExperimentRunnerBase(object):
                 # ============
                 
                 # Optimize the model according to the predictions
-                #loss = self._calc_loss(predicted_answer, answers)
+                loss = self._calc_loss(predicted_answer, answers)
                 #predictions = torch.max(predicted_answer, 1)[1]
-                loss = criterion(predicted_answer, answers.view(answers.size()[0]).cuda(async=True))
-                self._optimizer.zero_grad()
+                #loss = criterion(predicted_answer, answers.type(torch.LongTensor).view(answers.size()[0]).cuda(async=True))
                 #optimizer_word.zero_grad()
                 #optimizer_class.zero_grad()
+                optimizer.zero_grad()
                 loss.backward()
-                self._optimizer.step()              
+                optimizer.step()     
                 #optimizer_word.step()
                 #optimizer_class.step()
  
-                for param in self._model.state_dict().keys():
-                    if 'lin_word_net' in param:
-                        param = self._model.state_dict()[param]
+                #for param in self._model.state_dict().keys():
+                #    if 'lin_word_net' in param:
+                #        param = self._model.state_dict()[param]
          
                 batch_time.update(time.time() - end)
                 end = time.time() 

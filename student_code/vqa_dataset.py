@@ -113,7 +113,7 @@ class VqaDataset(Dataset):
         self.best_answers_filepath = best_answers_filepath
         self.max_question_length = max_question_length
         self.corpus_length = corpus_length
-        self.num_debug_questions = 10
+        self.num_debug_questions = None 
         self.dataset_type = ''
         self.model_type = model_type
         
@@ -252,6 +252,12 @@ class VqaDataset(Dataset):
         question = self.qIdToQA[q_id]['question']
         #print("Actual Question: ", question)
         question_encoded = get_encoding(self.question_corpus, question)
+        #question_reencode = []
+        #for index in question_encoded:
+        #    for word in self.question_corpus.keys():
+        #        if self.question_corpus[word] == index:
+        #            question_reencode.append(word)
+        #print(question_reencode)
         if self.model_type == 'coattention':
             question_padded = pad_question(self.max_question_length, question_encoded)
             question_output = torch.zeros([self.max_question_length, len(self.question_corpus)])
@@ -262,6 +268,7 @@ class VqaDataset(Dataset):
         answer = self.qIdToBestA[q_id]
         #print ("Actual Answer: ", answer)
         answer_encoded = get_encoding(self.answer_corpus, answer)
+        #print("Actual Answer: ", answer_encoded)
         #answer_binary = index_to_binary(self.corpus_length, answer_encoded)
         question_length = torch.tensor([len(question_encoded)])
         

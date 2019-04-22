@@ -31,7 +31,7 @@ class SimpleBaselineNet(nn.Module):
         full_features = torch.cat((word_features, image_features), dim=1)
         
         score = self.classifier(full_features)
-        return torch.clamp(score, 0, 1)
+        return score
 
 class WordFeaturesBinary(nn.Module):
     def __init__(self, max_question_length, corpus_length):
