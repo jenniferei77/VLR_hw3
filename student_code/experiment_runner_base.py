@@ -122,14 +122,13 @@ class ExperimentRunnerBase(object):
             data_time.update(time.time() - end)
             self._model.eval()
 
-            questions = data['question'] # Nxcorpus_size
-            images = data['image'] # Nx3x224x224
-            answers = data['answer'] # Nx1 (index numbers)
-            question_lengths = data['question_length'] # Nx1 (question lengths)
+            questions = data['question'].type(torch.FloatTensor).cuda(async=True)
+            images = data['image'].type(torch.FloatTensor).cuda(async=True)
+            answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
+            question_lengths = data['question_length'].type(torch.FloatTensor).cuda(async=True)
 
             predicted_answers = self._model(images, questions, question_lengths) 
 
-            #predicts_bounded = torch.sigmoid(predicted_answers) # scale predictions between 0-1
             predicts_bounded = F.softmax(predicted_answers, 0)
             predicted_max_indices = predicted_answers.max(1)[1] # predicted answer word
             predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
@@ -162,16 +161,16 @@ class ExperimentRunnerBase(object):
         data_time = AverageMeter()
         avg_accuracy = AverageMeter()
 
-        word_params = []
-        other_params = []
-        for param in self._model.state_dict().keys():
-            if 'lin_word_net' in param:
-                word_params.append(self._model.state_dict()[param])
-            elif 'classifier' in param:
-                other_params.append(self._model.state_dict()[param])
+        #word_params = []
+        #other_params = []
+        #for param in self._model.state_dict().keys():
+        #    if 'lin_word_net' in param:
+        #        word_params.append(self._model.state_dict()[param])
+        #    elif 'classifier' in param:
+        #        other_params.append(self._model.state_dict()[param])
         #optimizer = torch.optim.SGD([{'params': self._model.lin_word_net.parameters(), 'lr':0.8}, {'params': self._model.classifier.parameters()}], lr=0.01, momentum=0.9, weight_decay=0.0005)
-        optimizer_word = torch.optim.SGD(self._model.lin_word_net.parameters(), 0.8, 0.9, 0.0005)
-        optimizer_class = torch.optim.SGD(self._model.classifier.parameters(), 0.01, 0.9, 0.0005)
+        #optimizer_word = torch.optim.SGD(self._model.lin_word_net.parameters(), 0.8, 0.9, 0.0005)
+        #optimizer_class = torch.optim.SGD(self._model.classifier.parameters(), 0.01, 0.9, 0.0005)
         criterion = nn.CrossEntropyLoss().cuda()
         end = time.time()
         #clipper = Clipper()
@@ -181,10 +180,10 @@ class ExperimentRunnerBase(object):
             for batch_id, data in enumerate(self._train_dataset_loader):
                 data_time.update(time.time() - end)
 
-                questions = data['question']
-                images = data['image']
-                answers = data['answer']
-                question_lengths = data['question_length']
+                questions = data['question'].type(torch.FloatTensor)
+                images = data['image'].type(torch.FloatTensor).cuda
+                answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
+                question_lengths = data['question_length'].type(torch.FloatTensor)
 
                 current_step = epoch * num_batches + batch_id
                 # ============
@@ -197,13 +196,13 @@ class ExperimentRunnerBase(object):
                 #loss = self._calc_loss(predicted_answer, answers)
                 #predictions = torch.max(predicted_answer, 1)[1]
                 loss = criterion(predicted_answer, answers.view(answers.size()[0]).cuda(async=True))
-                #self._optimizer.zero_grad()
-                optimizer_word.zero_grad()
-                optimizer_class.zero_grad()
+                self._optimizer.zero_grad()
+                #optimizer_word.zero_grad()
+                #optimizer_class.zero_grad()
                 loss.backward()
-                #self._optimizer.step()              
-                optimizer_word.step()
-                optimizer_class.step()
+                self._optimizer.step()              
+                #optimizer_word.step()
+                #optimizer_class.step()
  
                 for param in self._model.state_dict().keys():
                     if 'lin_word_net' in param:

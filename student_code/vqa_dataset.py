@@ -91,7 +91,7 @@ class VqaDataset(Dataset):
     want to reference the full repo (https://github.com/GT-Vision-Lab/VQA) for usage examples.
     """
 
-    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transform=None, omit_words=None, loaded_question_corpus=None, loaded_answer_corpus=None, best_answers_filepath=None, max_question_length=30, corpus_length=1000):
+    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transform=None, omit_words=None, loaded_question_corpus=None, loaded_answer_corpus=None, best_answers_filepath=None, max_question_length=26, corpus_length=1000, model_type='simple'):
         """
         Args:
             image_dir (string): Path to the directory with COCO images
@@ -115,6 +115,7 @@ class VqaDataset(Dataset):
         self.corpus_length = corpus_length
         self.num_debug_questions = 10
         self.dataset_type = ''
+        self.model_type = model_type
         
         self.imgToQA = {}
         self.qIdToA = {}
@@ -251,8 +252,13 @@ class VqaDataset(Dataset):
         question = self.qIdToQA[q_id]['question']
         #print("Actual Question: ", question)
         question_encoded = get_encoding(self.question_corpus, question)
-        #question_padded = pad_question(self.max_question_length, question_encoded)
-        question_binary = index_to_binary(len(self.question_corpus), question_encoded)
+        if self.model_type == 'coattention':
+            question_padded = pad_question(self.max_question_length, question_encoded)
+            question_output = torch.zeros([self.max_question_length, len(self.question_corpus)])
+            for index in range(self.max_question_length):
+                question_output[index, question_padded[index]] = 1
+        else:
+            question_output = index_to_binary(len(self.question_corpus), question_encoded)
         answer = self.qIdToBestA[q_id]
         #print ("Actual Answer: ", answer)
         answer_encoded = get_encoding(self.answer_corpus, answer)
@@ -272,5 +278,5 @@ class VqaDataset(Dataset):
         #print("Image size: ", image.shape)
         #print("Question size: ", question_binary.shape)
         #print("Answer size: ", answer_binary.shape)
-        return {'question':question_binary, 'image':image, 'answer':answer_encoded, 'question_length':question_length}
+        return {'question':question_output, 'image':image, 'answer':answer_encoded, 'question_length':question_length}
     

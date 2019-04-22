@@ -12,18 +12,6 @@ import torch
 import torch.nn as nn
 import pdb
 
-#class Clipper(object):
-#    def __init__(self, frequency=5):
-#        self.frequency = frequency
-#    def __call__(self, module, w_clip):
-#        if hasattr(module, 'weight'):
-#            weight = module.weight.data
-#            if hasattr(module, 'word'):
-#                w_clip = 1500
-#            else:
-#                w_clip = 20
-#            weight.mul_(w_clip/weight)
-
 class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
     Sets up the Simple Baseline model for training. This class is specifically responsible for creating the model and optimizing it.
@@ -32,8 +20,6 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                  test_image_dir, test_question_path, test_annotation_path, loaded_question_corpus, loaded_answer_corpus, train_best_answers_filepath, val_best_answers_filepath, batch_size, num_epochs,
                  num_data_loader_workers=10, corpus_length=1000):
 
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        
         train_dataset = VqaDataset(image_dir=train_image_dir,
                                    question_json_file_path=train_question_path,
                                    annotation_json_file_path=train_annotation_path,
@@ -56,13 +42,13 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
         model.cuda()
         word_params = []
         other_params = []
-        #for param in model.state_dict().keys():
-        #    if 'lin_word_net' in param:
-        #        word_params.append(model.state_dict()[param])
-        #    elif 'classifier' in param:
-        #        other_params.append(model.state_dict()[param])
-        #optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
-        optimizer = None
+        for param in model.state_dict().keys():
+            if 'lin_word_net' in param:
+                word_params.append(model.state_dict()[param])
+            elif 'classifier' in param:
+                other_params.append(model.state_dict()[param])
+        optimizer = torch.optim.SGD([{'params': word_params, 'lr':0.8}, {'params': other_params}], lr=0.01, momentum=0.9, weight_decay=0.0005)
+        #optimizer = None
         super().__init__(train_dataset, val_dataset, model, optimizer, batch_size, num_epochs, num_data_loader_workers)
 
     def _calc_loss(self, predicted_answers, true_answers):

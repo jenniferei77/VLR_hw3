@@ -130,8 +130,8 @@ class GoogLeNet(nn.Module):
         # N x 1024 x 1 x 1
         x = x.view(x.size(0), -1)
         # N x 1024
-        x = self.dropout(x)
-        x = self.fc(x)
+        #x = self.dropout(x)
+        #x = self.fc(x)
         # N x 1000 (num_classes)
         if self.training and self.aux_logits:
             return aux1, aux2, x

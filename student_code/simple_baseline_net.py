@@ -15,11 +15,11 @@ class SimpleBaselineNet(nn.Module):
         self.corpus_length = corpus_length
 
         #Word and Image Features:
-        self.lin_word_net = nn.Linear(self.corpus_length, self.corpus_length)
+        self.lin_word_net = nn.Linear(self.corpus_length, 1024)
         self.image_net = GoogLeNet(num_classes=self.corpus_length, transform_input=True)
 
         #Classify:
-        self.classifier = nn.Linear(self.corpus_length*2, self.corpus_length)
+        self.classifier = nn.Linear(2048, self.corpus_length)
 
     def forward(self, image, question_encodings, question_lengths):
         # TODO
