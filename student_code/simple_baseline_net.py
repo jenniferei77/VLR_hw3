@@ -24,7 +24,7 @@ class SimpleBaselineNet(nn.Module):
     def forward(self, image, question_encodings, question_lengths):
         # TODO
         image = image.cuda(async=True)
-        word_features = self.lin_word_net(question_encodings.type(torch.FloatTensor).cuda(async=True))
+        word_features = self.lin_word_net(question_encodings.cuda(async=True))
         image_features = self.image_net(image)
         if self.training:
             image_features = image_features[-1]
@@ -33,39 +33,4 @@ class SimpleBaselineNet(nn.Module):
         score = self.classifier(full_features)
         return score
 
-class WordFeaturesBinary(nn.Module):
-    def __init__(self, max_question_length, corpus_length):
-        super(WordFeaturesBinary, self).__init__()
-        self.word_embedding = nn.Embedding(max_question_length, corpus_length)
-        self.layer1 = nn.Linear(300, 128)
-        self.layer2 = nn.Linear(128, corpus_length)
-        init.xavier_uniform_(self.word_embedding.weight.data)
-
-    def forward(self, question_encodings):
-        embedding = self.word_embedding(question_encodings)
-        mid_layer = self.layer1(embedding)
-        word_features = self.layer2(mid_layer)
-        return word_features.squeeze(0)
-
-class WordFeaturesIndexed(nn.Module):
-    def __init__(self, max_question_length, question_lengths, corpus_length):
-    #def __init__(self, question_max, corpus_length=1000):
-        super(WordFeatures, self).__init__()
-        #question_lengths is list of each question_length
-        self.word_embedding = nn.Embedding(max_question_length, question_lengths, padding_idx=0)
-        #self.dropout = nn.Dropout(0.5)
-        self.layer1 = nn.Linear(corpus_length, 128),
-        self.layer2 = nn.Linear(128, corpus_length)
-        init.xavier_uniform_(self.word_embedding.weight.data)
-        #init.xavier_uniform(self.layer1.weight)
-        #init.xavier_uniform(self.layer2.weight)
-
-    def forward(self, question_encodings, question_lengths):
-        question_encodings = question_encodings.type(torch.LongTensor) 
-  
-        embedding = self.word_embedding(question_encodings)
-        un_padded = pack_padded_sequence(embedding, question_lengths, batch_first=True)
-        mid_layer = self.layer1(un_padded)
-        word_features = self.layer2(mid_layer)
-        return word_features.squeeze(0)
    

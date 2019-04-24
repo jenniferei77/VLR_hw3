@@ -41,22 +41,21 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
         model = SimpleBaselineNet(corpus_length=len(train_dataset.question_corpus))
         model.cuda()
         
-        #word_params = []
-        #other_params = []
         word_params = {}
         other_params = {}
-        #optimize_params = model.state_dict()
         for name, param in model.state_dict().items():
             if isinstance(param, nn.Parameter):
                 param = param.data
             if 'lin_word_net' in name:
                 word_params[name] = param
-                #word_params.append(torch.nn.Parameter(model.state_dict()[param], requires_grad=True))
             elif 'classifier' in name:
                 other_params[name] = param
-                #other_params.append(torch.nn.Parameter(model.state_dict()[param], requires_grad=True))
-        optimizer = torch.optim.SGD([{'params': model.lin_word_net.parameters(), 'lr':0.8}, {'params': model.classifier.parameters()}], momentum=0.9, lr=0.01, weight_decay=0.0005)
-        #optimizer = None
+            elif 'image_net' in name:
+                param.requires_grad = False
+                    
+
+        optimizer = torch.optim.SGD([{'params': model.lin_word_net.parameters(), 'lr':0.8}, {'params': model.classifier.parameters()}], lr=0.01, momentum=0.9)
+
         super().__init__(train_dataset, val_dataset, model, optimizer, batch_size, num_epochs, num_data_loader_workers)
 
     def _calc_loss(self, predicted_answers, true_answers):
@@ -66,3 +65,14 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
         loss = F.cross_entropy(predicted_answers, true_answers.type(torch.LongTensor).view(true_answers.size()[0]).cuda(async=True))
         return loss
 
+    def _adjust_lr(self, optimizer, epoch):
+        word_lr = self._word_lr * (0.1**(epoch // 20))
+        other_lr = self._other_lr * (0.1**(epoch // 20))
+        group_num = 1
+        for param_group in optimizer.param_groups:
+            if group_num == 1:
+                param_group['lr'] = word_lr
+            elif group_num == 2:
+                param_group['lr'] = other_lr
+        
+            group_num += 1

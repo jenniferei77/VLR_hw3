@@ -40,13 +40,17 @@ class CoattentionNetExperimentRunner(ExperimentRunnerBase):
         
         self._optimizer = torch.optim.RMSprop(self._model.parameters(), lr=4e-4, momentum=0.99, weight_decay=1e-8)
 
-        super().__init__(train_dataset, val_dataset, self._model, batch_size, num_epochs,
+        super().__init__(train_dataset, val_dataset, self._model, self._optimizer, batch_size, num_epochs,
                          num_data_loader_workers)
 
     def _optimize(self, predicted_answers, true_answer_ids):
         # TODO
-        pdb.set_trace()
         predicted_answers = torch.max(predicted_answers, 1)[1].type(torch.FloatTensor)
         true_answers = trew_answer_ids.view(true_answer_ids.size()[0]).type(torch.FloatTensor).cuda(async=True)
         loss = F.cross_entropy(predicted_answers, true_answers)
         return loss
+
+    def _adjust_lr(self, optimizer, epoch):
+        lr = self._rms_lr * (0.1**(epoch // 20))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr

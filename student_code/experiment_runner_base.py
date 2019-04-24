@@ -1,5 +1,6 @@
 from torch.utils.data import DataLoader
 import torch
+import torch.nn.functional as F
 from torch.utils.data.sampler import SubsetRandomSampler
 import numpy as np
 from torchvision import transforms
@@ -43,8 +44,8 @@ class Clipper(object):
                 return
             else:
                 w_clip = 20
-            if weight > w_clip:
-                weight.mul_(w_clip/weight)
+            greater = weight.ge(w_clip)
+            weight[greater] = w_clip
 
 def collate_sort(batch):
     batch_size = len(batch)
@@ -74,23 +75,30 @@ class ExperimentRunnerBase(object):
         self._model = model
         self._optimizer = optimizer
         self._num_epochs = num_epochs
-        self._log_freq = 10  # Steps
-        self._test_freq = 8000  # Steps
-        self._clip_freq = 5 # Steps
+        self._log_freq = 100  # Steps
+        self._test_freq = 2000  # Steps
+        self._clip_freq = 100 # Steps
         self._word_lr = 0.8
         self._other_lr = 0.01
+        self._rms_lr = 4e-4
         self._corpus_length = len(train_dataset.question_corpus)
 
         val_length = len(val_dataset)
-        indices = list(range(val_length))
-        split_set = int(np.floor(0.15 * val_length))
+        train_length = len(train_dataset)
+        indices_val = list(range(val_length))
+        indices_train = list(range(train_length))
+        split_val = int(np.floor(0.15 * val_length))
+        split_train = int(np.floor(0.15 * train_length))
         random_seed = 9999
         np.random.seed(random_seed)
-        np.random.shuffle(indices)
-        val_indices = indices[:split_set]
+        np.random.shuffle(indices_val)
+        val_indices = indices_val[:split_val]
         val_sampler = SubsetRandomSampler(val_indices)
-
-        self._train_dataset_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_data_loader_workers)
+        np.random.shuffle(indices_train)
+        train_indices = indices_train[:split_train]
+        train_sampler = SubsetRandomSampler(train_indices)
+  
+        self._train_dataset_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
         # If you want to, you can shuffle the validation dataset and only use a subset of it to speed up debugging
         self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
         self._date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
@@ -111,8 +119,7 @@ class ExperimentRunnerBase(object):
     def validate(self):
         batch_time = AverageMeter()
         data_time = AverageMeter()
-        avg_accuracy = AverageMeter()
-
+        avg_ap = AverageMeter()
         # TODO. Should return your validation accuracy
         end = time.time()
         aps = []
@@ -122,61 +129,51 @@ class ExperimentRunnerBase(object):
             data_time.update(time.time() - end)
             self._model.eval()
 
-            questions = data['question'].type(torch.FloatTensor).cuda(async=True)
-            images = data['image'].type(torch.FloatTensor).cuda(async=True)
+            questions = data['question'].type(torch.FloatTensor)
+            images = data['image'].type(torch.FloatTensor)
             answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
-            question_lengths = data['question_length'].type(torch.FloatTensor).cuda(async=True)
+            question_lengths = data['question_length'].type(torch.FloatTensor)
 
             predicted_answers = self._model(images, questions, question_lengths) 
 
-            predicts_bounded = F.softmax(predicted_answers, 0)
-            predicted_max_indices = predicted_answers.max(1)[1] # predicted answer word
+            predicts_bounded = F.softmax(predicted_answers, 1)
+            predicted_max_indices = predicts_bounded.max(1)[1] # predicted answer word
             predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
 
             #truth_max_indices = answers.max(1)[1]
-            answer_indices = answers.view(predicted_max_indices.size()[0])
+            #answer_indices = answers.view(predicted_max_indices.size()[0])
            
             predicted_max_indices = predicted_max_indices.detach().cpu().numpy()
-            answer_indices = answer_indices.detach().cpu().numpy()
+            answer_indices = answers.detach().cpu().numpy()
 
             accuracy = (answer_indices == predicted_max_indices).sum() / answer_indices.shape[0]
             aps.append(accuracy)
+            avg_ap.update(accuracy)
             batch_time.update(time.time() - end)
             end = time.time()
             if batch_id % iter_prints == 0:
                 iter_frac += 1
                 print(str(iter_frac) + "/10 done!")
-                interim_mAP = np.nanmean(aps)
-                print("Interim mAP: ", interim_mAP)
-                print("Actual Batch Time: ", batch_time.val)
+                print("Interim mAP: ", avg_ap.avg)
+                print("Actual mAP?: ", avg_ap.val)
                 print("Average Batch Time: ", batch_time.avg)
-                print("Actual Data Time: ", data_time.val)
                 print("Average Data Time: ", data_time.avg)    
           
-        mAP = np.nanmean(aps)   
-        return mAP
+        #mAP = np.nanmean(aps)   
+        return avg_ap.avg
 
     def train(self):
         batch_time = AverageMeter()
         data_time = AverageMeter()
-        avg_accuracy = AverageMeter()
-
-        #word_params = []
-        #other_params = []
-        #for param in self._model.state_dict().keys():
-        #    if 'lin_word_net' in param:
-        #        word_params.append(self._model.state_dict()[param])
-        #    elif 'classifier' in param:
-        #        other_params.append(self._model.state_dict()[param])
-        #optimizer = torch.optim.SGD([{'params': self._model.lin_word_net.parameters(), 'lr':0.8}, {'params': self._model.classifier.parameters()}], lr=0.01, momentum=0.9, weight_decay=0.0005)
-        #optimizer_word = torch.optim.SGD(self._model.lin_word_net.parameters(), 0.8, 0.9, 0.0005)
-        #optimizer_class = torch.optim.SGD(self._model.classifier.parameters(), 0.01, 0.9, 0.0005)
-        criterion = nn.CrossEntropyLoss().cuda()
         end = time.time()
         optimizer = self._optimizer
-        #clipper = Clipper()
+        clipper = Clipper()
         for epoch in range(self._num_epochs):
+            self._adjust_lr(optimizer, epoch)
             num_batches = len(self._train_dataset_loader)
+            #avg_loss = AverageMeter()
+            avg_test_accuracy = AverageMeter()
+            avg_train_acc = AverageMeter()
             self._model.train()
             for batch_id, data in enumerate(self._train_dataset_loader):
                 data_time.update(time.time() - end)
@@ -192,35 +189,40 @@ class ExperimentRunnerBase(object):
                 # This logic should be generic; not specific to either the Simple Baseline or CoAttention.
                 predicted_answer = self._model(images, questions, question_lengths)
                 # ============
-                
+                predicts_bounded = F.softmax(predicted_answer, 1)
+                predicted_max_indices = predicts_bounded.max(1)[1] # predicted answer word
+                predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
+
+                #truth_max_indices = answers.max(1)[1]
+                #answer_indices = answers.view(predicted_max_indices.size()[0], -1)
+           
+                predicted_max_indices = predicted_max_indices.detach().cpu().numpy()
+                answer_indices = answers.detach().cpu().numpy()
+
+                train_accuracy = (answer_indices == predicted_max_indices).sum() / answer_indices.shape[0]
+                avg_train_acc.update(train_accuracy)
+
                 # Optimize the model according to the predictions
                 loss = self._calc_loss(predicted_answer, answers)
-                #predictions = torch.max(predicted_answer, 1)[1]
-                #loss = criterion(predicted_answer, answers.type(torch.LongTensor).view(answers.size()[0]).cuda(async=True))
-                #optimizer_word.zero_grad()
-                #optimizer_class.zero_grad()
+                #avg_loss.update(loss.item())
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()     
-                #optimizer_word.step()
-                #optimizer_class.step()
- 
-                #for param in self._model.state_dict().keys():
-                #    if 'lin_word_net' in param:
-                #        param = self._model.state_dict()[param]
          
                 batch_time.update(time.time() - end)
                 end = time.time() 
-                #if current_step % self._clip_freq == 0:
-                #    self._model.apply(clipper)
+                if current_step % self._clip_freq == 0:
+                    self._model.apply(clipper)
                 if current_step % self._log_freq == 0:
                     print("Epoch: {}, Batch {}/{} has loss {}".format(epoch, batch_id, num_batches, loss))
                     # TODO: you probably want to plot something here
-                    self._writer.add_scalar('train/loss', loss.item(), current_step)
-                if current_step != 0 and current_step % self._test_freq == 0:
+                    self._writer.add_scalar('train/loss', loss, current_step)
+                    self._writer.add_scalar('train/accuracy', avg_train_acc.avg, current_step)
+                if current_step % self._test_freq == 0:
                     val_accuracy = self.validate()
+                    avg_test_accuracy.update(val_accuracy)
                     print("Epoch: {} has val accuracy {}".format(epoch, val_accuracy))
                     # TODO: you probably want to plot something here
-                    self._writer.add_scalar('test/accuracy', val_accuracy, current_step)
-
+                    self._writer.add_scalar('test/accuracy', avg_test_accuracy.avg, current_step)
+                
 

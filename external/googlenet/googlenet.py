@@ -114,21 +114,21 @@ class GoogLeNet(nn.Module):
         # N x 512 x 14 x 14
         x = self.inception4c(x)
         # N x 512 x 14 x 14
-        x = self.inception4d(x)
+        #x = self.inception4d(x)
         # N x 528 x 14 x 14
         if self.training and self.aux_logits:
             aux2 = self.aux2(x)
-        x = self.inception4e(x)
+        #x = self.inception4e(x)
         # N x 832 x 14 x 14
-        x = self.maxpool4(x)
+        #x = self.maxpool4(x)
         # N x 832 x 7 x 7
-        x = self.inception5a(x)
+        #x = self.inception5a(x)
         # N x 832 x 7 x 7
-        x = self.inception5b(x)
+        #x = self.inception5b(x)
         # N x 1024 x 7 x 7
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
         # N x 1024 x 1 x 1
-        x = x.view(x.size(0), -1)
+        #x = x.view(x.size(0), -1)
         # N x 1024
         #x = self.dropout(x)
         #x = self.fc(x)

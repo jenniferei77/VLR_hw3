@@ -124,12 +124,12 @@ class VqaDataset(Dataset):
         self.question_corpus = {}
         self.answer_corpus = {}
         self.qIdToBestA = {}
+        self.qIdList = []
 
         vqa = VQA(self.annotation_filepath, self.question_filepath)
         self.imgToQA = vqa.imgToQA
         self.qIdToA = vqa.qa
         self.qIdToQA = vqa.qqa
-
         
         if "COCO_train2014" in self.image_filename_pattern:
             self.image_prefix = "COCO_train2014_"
@@ -241,23 +241,29 @@ class VqaDataset(Dataset):
         self.question_corpus = freq_to_encode_corpus(q_corpus) #Question words to index dictionary
         self.answer_corpus = freq_to_encode_corpus(a_corpus) #Answer words to index dictionary
         self.qIdToBestA = qIdToBestA #Question Id number to encoded answer dictionary
+        self.qIdList = list(self.qIdToBestA.keys())
+      
+        self.qIdToEQ = {}
+        self.qIdToEA = {}
+        for q_id in self.qIdList:
+            question = self.qIdToQA[q_id]['question']
+            q_encoded = get_encoding(self.question_corpus, question)
+            self.qIdToEQ[q_id] = q_encoded
+
+            answer = self.qIdToBestA[q_id]
+            a_encoded = get_encoding(self.answer_corpus, answer)
+            self.qIdToEA[q_id] = a_encoded
+            
          
     def __len__(self):
-        return len(self.qIdToBestA)
+        return len(self.qIdList)
 
     def __getitem__(self, idx):
-        q_ids = list(self.qIdToBestA.keys())
-        q_id = q_ids[idx]
+        q_id = self.qIdList[idx]
         im_id = self.qIdToQA[q_id]['image_id']
-        question = self.qIdToQA[q_id]['question']
-        #print("Actual Question: ", question)
-        question_encoded = get_encoding(self.question_corpus, question)
-        #question_reencode = []
-        #for index in question_encoded:
-        #    for word in self.question_corpus.keys():
-        #        if self.question_corpus[word] == index:
-        #            question_reencode.append(word)
-        #print(question_reencode)
+        #question = self.qIdToQA[q_id]['question']
+        #question_encoded = get_encoding(self.question_corpus, question)
+        question_encoded = self.qIdToEQ[q_id]
         if self.model_type == 'coattention':
             question_padded = pad_question(self.max_question_length, question_encoded)
             question_output = torch.zeros([self.max_question_length, len(self.question_corpus)])
@@ -265,25 +271,20 @@ class VqaDataset(Dataset):
                 question_output[index, question_padded[index]] = 1
         else:
             question_output = index_to_binary(len(self.question_corpus), question_encoded)
-        answer = self.qIdToBestA[q_id]
-        #print ("Actual Answer: ", answer)
-        answer_encoded = get_encoding(self.answer_corpus, answer)
-        #print("Actual Answer: ", answer_encoded)
+        #answer = self.qIdToBestA[q_id]
+        #answer_encoded = get_encoding(self.answer_corpus, answer)
+        answer_encoded = self.qIdToEA[q_id]
         #answer_binary = index_to_binary(self.corpus_length, answer_encoded)
         question_length = torch.tensor([len(question_encoded)])
         
         im_type = self.image_filename_pattern.split('.')[-1]
         im_access_id = '0'*(12-len(str(im_id))) + str(im_id)
         image_file = self.image_dir + '/' + self.image_prefix + im_access_id + '.' + im_type
-        #print("Image File: ", image_file)
         loaded_img = default_loader(image_file)
         if loaded_img == None:
             print("Image not loaded correctly")
             return exit(1)
         
         image = self.transforms(loaded_img)
-        #print("Image size: ", image.shape)
-        #print("Question size: ", question_binary.shape)
-        #print("Answer size: ", answer_binary.shape)
         return {'question':question_output, 'image':image, 'answer':answer_encoded, 'question_length':question_length}
     
