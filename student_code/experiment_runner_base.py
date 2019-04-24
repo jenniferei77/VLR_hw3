@@ -47,24 +47,6 @@ class Clipper(object):
             greater = weight.ge(w_clip)
             weight[greater] = w_clip
 
-def collate_sort(batch):
-    batch_size = len(batch)
-    sep_batch = list(zip(*batch))
-    questions, images, answers, question_lengths = list(sep_batch[0]), sep_batch[1], sep_batch[2], sep_batch[3]
-    
-    question_lengths = torch.tensor(question_lengths)
-    answers = torch.tensor(answers).view(-1, 1)
-    lengths_sorted, inds_sorted = question_lengths.sort(0, descending=True)
-    
-    answers_sorted = answers[inds_sorted]
-    ques_sorted = np.zeros((batch_size, len(questions[0])))
-    image_sorted = np.zeros((batch_size, 3, 224, 224))
-    for ind in inds_sorted:
-        ques_sorted[ind, :] = questions[ind]
-        image_sorted[ind, :, :, :] = images[ind]
-        
-    return torch.tensor(ques_sorted), torch.tensor(image_sorted), answers_sorted, lengths_sorted 
-
 class ExperimentRunnerBase(object):
     """
     This base class contains the simple train and validation loops for your VQA experiments.
@@ -140,9 +122,6 @@ class ExperimentRunnerBase(object):
             predicted_max_indices = predicts_bounded.max(1)[1] # predicted answer word
             predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
 
-            #truth_max_indices = answers.max(1)[1]
-            #answer_indices = answers.view(predicted_max_indices.size()[0])
-           
             predicted_max_indices = predicted_max_indices.detach().cpu().numpy()
             answer_indices = answers.detach().cpu().numpy()
 
@@ -159,8 +138,8 @@ class ExperimentRunnerBase(object):
                 print("Average Batch Time: ", batch_time.avg)
                 print("Average Data Time: ", data_time.avg)    
           
-        #mAP = np.nanmean(aps)   
-        return avg_ap.avg
+        mAP = np.nanmean(aps)   
+        return mAP
 
     def train(self):
         batch_time = AverageMeter()
