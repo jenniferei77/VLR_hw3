@@ -16,9 +16,7 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
     """
     Sets up the Simple Baseline model for training. This class is specifically responsible for creating the model and optimizing it.
     """
-    def __init__(self, train_image_dir, train_question_path, train_annotation_path,
-                 test_image_dir, test_question_path, test_annotation_path, loaded_question_corpus, loaded_answer_corpus, train_best_answers_filepath, val_best_answers_filepath, batch_size, num_epochs,
-                 num_data_loader_workers=10, corpus_length=1000):
+    def __init__(self, train_image_dir, train_question_path, train_annotation_path, test_image_dir, test_question_path, test_annotation_path, loaded_question_corpus, loaded_answer_corpus, train_best_answers_filepath, val_best_answers_filepath, train_image_features_filepath, train_loaded_imgIdToidx_filepath, val_image_features_filepath, val_loaded_imgIdToidx_filepath, batch_size, num_epochs, num_data_loader_workers=10, corpus_length=1000):
 
         train_dataset = VqaDataset(image_dir=train_image_dir,
                                    question_json_file_path=train_question_path,
@@ -27,6 +25,8 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                    loaded_question_corpus=loaded_question_corpus,
                                    loaded_answer_corpus=loaded_answer_corpus,
                                    best_answers_filepath=train_best_answers_filepath,
+                                   image_features_filepath=train_image_features_filepath,
+                                   loaded_imgIdToidx_filepath=train_loaded_imgIdToidx_filepath,
                                    corpus_length=corpus_length)
 
         val_dataset = VqaDataset(image_dir=test_image_dir,
@@ -36,6 +36,8 @@ class SimpleBaselineExperimentRunner(ExperimentRunnerBase):
                                  loaded_question_corpus=loaded_question_corpus,
                                  loaded_answer_corpus=loaded_answer_corpus,
                                  best_answers_filepath=val_best_answers_filepath,
+                                 image_features_filepath=val_image_features_filepath,
+                                 loaded_imgIdToidx_filepath=val_loaded_imgIdToidx_filepath,
                                  corpus_length=corpus_length)
  
         model = SimpleBaselineNet(corpus_length=len(train_dataset.question_corpus))

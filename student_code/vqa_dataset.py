@@ -1,6 +1,9 @@
 from torch.utils.data import Dataset, dataloader
+from external.googlenet.googlenet import GoogLeNet
 from external.vqa.vqa import VQA
 from PIL import Image
+import torch.nn.functional as F
+import h5py
 import os
 import glob
 import numpy as np
@@ -17,23 +20,36 @@ import pdb
 
 def pil_loader(path):
     with open(path, 'rb') as f:
-        img = Image.open(f)
-        return img.convert('RGB')
+        with Image.open(f) as img:
+            return img.convert('RGB')
 
-def accimage_loader(path):
-    import accimage
-    try:
-        print("accimage")
-        return accimage.Image(path)
-    except IOError:
-        return pil_loader(path)
+class ImageFeatures(nn.Module):
+    def __init__(self, num_classes=1000, coattention=False):
+        super(ImageFeatures, self).__init__()
+        self.coattention = coattention
+        self.image_net = GoogLeNet(num_classes=1000, coattention=coattention)
 
-def default_loader(path):
-    from torchvision import get_image_backend
-    if get_image_backend() == 'accimage':
-        return accimage_loader(path)
-    else:
-        return pil_loader(path)
+    def forward(self, images):     
+        image_features = self.image_net(images)
+        if self.coattention:
+            image_features = image_features.view(image_features.size()[0], 196, 512)
+            image_features = F._max_pool1d(image_features, kernel_size=512).squeeze(2)
+        return image_features
+
+#def accimage_loader(path):
+#    import accimage
+#    try:
+#        print("accimage")
+#        return accimage.Image(path)
+#    except IOError:
+#        return pil_loader(path)
+
+#def default_loader(path):
+#    from torchvision import get_image_backend
+#    if get_image_backend() == 'accimage':
+#        return accimage_loader(path)
+#    else:
+#        return pil_loader(path)
 
 def separate(sentence):
     punctuation = [',', '?', '.', '!']
@@ -91,7 +107,7 @@ class VqaDataset(Dataset):
     want to reference the full repo (https://github.com/GT-Vision-Lab/VQA) for usage examples.
     """
 
-    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transform=None, omit_words=None, loaded_question_corpus=None, loaded_answer_corpus=None, best_answers_filepath=None, max_question_length=26, corpus_length=1000, model_type='simple'):
+    def __init__(self, image_dir=None, question_json_file_path=None, annotation_json_file_path=None, image_filename_pattern=None, transform=None, omit_words=None, loaded_question_corpus=None, loaded_answer_corpus=None, best_answers_filepath=None, image_features_filepath=None, loaded_imgIdToidx_filepath=None, max_question_length=26, corpus_length=1000, model_type='simple'):
         """
         Args:
             image_dir (string): Path to the directory with COCO images
@@ -111,12 +127,16 @@ class VqaDataset(Dataset):
         self.loaded_question_corpus = loaded_question_corpus
         self.loaded_answer_corpus = loaded_answer_corpus
         self.best_answers_filepath = best_answers_filepath
+        self.loaded_image_features = image_features_filepath
+        self.loaded_imgIdToidx_filepath = loaded_imgIdToidx_filepath
+
         self.max_question_length = max_question_length
         self.corpus_length = corpus_length
         self.num_debug_questions = None 
         self.dataset_type = ''
         self.model_type = model_type
-        
+        self.image_embed = None
+ 
         self.imgToQA = {}
         self.qIdToA = {}
         self.qIdToQA = {}
@@ -125,6 +145,7 @@ class VqaDataset(Dataset):
         self.answer_corpus = {}
         self.qIdToBestA = {}
         self.qIdList = []
+        self.imgIdToidx = {}
 
         vqa = VQA(self.annotation_filepath, self.question_filepath)
         self.imgToQA = vqa.imgToQA
@@ -144,14 +165,27 @@ class VqaDataset(Dataset):
        
         if omit_words is None:
             self.omit_words = ['the', 'a', 'so', 'her', 'him', 'very', 'an', 'this', 'does', 'will', 'i']
-       
+         
+        if self.model_type == 'coattention':
+            self.image_embed = 196
+        else:
+            self.image_embed = 1024      
+
+ 
         if self.transforms is None:
+            img_size = (224, 224)
+            #if self.model_type == 'coattention':
+            #    img_size = (448, 448)
+            #else:
+            #    img_size = (224, 224)
             self.transforms = transforms.Compose([
-                transforms.Resize((224, 224)), 
+                transforms.Resize(img_size), 
                 transforms.ToTensor(), 
                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                 ])
       
+        date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
         #Load Corpuses and Best Answers
         q_corpus = {}
         a_corpus = {}
@@ -253,8 +287,60 @@ class VqaDataset(Dataset):
             answer = self.qIdToBestA[q_id]
             a_encoded = get_encoding(self.answer_corpus, answer)
             self.qIdToEA[q_id] = a_encoded
-            
-         
+
+        #Loade Image Features to h5py file
+        if self.loaded_image_features==None:
+            self.loaded_image_features = './created_data/' + self.dataset_type + '_image_features_' + self.model_type + '_' + date_time + '.hdf5'
+            if self.model_type == 'coattention':
+                google_feats = ImageFeatures(num_classes=self.corpus_length, coattention=True)
+            else:
+                google_feats = ImageFeatures(num_classes=self.corpus_length)
+            im_type = self.image_filename_pattern.split('.')[-1]
+            image_files = self.image_dir + '/' + self.image_prefix + '*.' + im_type
+            num_images = len(glob.glob(image_files))
+
+            with h5py.File(self.loaded_image_features, "w") as f:
+                image_dataset = f.create_dataset('image_features', (num_images, self.image_embed), chunks=True, compression="gzip")
+                image_num = 0
+                start_num = 0
+                image_batch = []
+                for image_file in glob.glob(image_files):
+                    im_index = image_file.split('.')[-2].split('_')[-1]
+                    im_index = im_index.lstrip('0')
+                    loaded_img = pil_loader(image_file)
+                    
+                    if loaded_img == None:
+                        print("Image not loaded correctly")
+                        return exit(1)
+                    image_trans = self.transforms(loaded_img)
+                    image_batch.append(image_trans)
+                    self.imgIdToidx[im_index] = image_num
+                    image_num += 1
+                    if image_num % 300 == 0 or image_num == num_images:
+                        print("Loading Images: ", start_num, " to ", image_num)
+                        batch_tensor = torch.stack(image_batch)
+                        image_features = google_feats(batch_tensor) # Shape B x 196 for Coattention, B x 1024 for Simple
+                        dataset_ims = image_features.detach().cpu().numpy()
+                        image_dataset[start_num:image_num, :] = dataset_ims
+                        start_num = image_num
+                        image_batch = []
+                self.loaded_imgIdToidx_filepath = './created_data/' + self.dataset_type + '_imgIdToidx_' + date_time + '.pkl'
+                pkl.dump(self.imgIdToidx, open(self.loaded_imgIdToidx_filepath, 'wb'), pkl.HIGHEST_PROTOCOL)
+ 
+
+        if self.loaded_imgIdToidx_filepath == None:
+            image_num = 0
+            for image_file in glob.glob(image_files):
+                im_index = image_file.split('.')[-2].split('_')[-1]
+                im_index = im_index.lstrip('0')
+                self.imgIdToidx[im_index] = image_num
+                image_num += 1
+            self.loaded_imgIdToidx_filepath = './created_data/' + self.dataset_type + '_imgIdToidx_' + date_time + '.pkl'
+            pkl.dump(q_corpus, open(self.loaded_imgIdToidx_filepath, 'wb'), pkl.HIGHEST_PROTOCOL)
+        else:
+            self.imgIdToidx = pkl.load(open(self.loaded_imgIdToidx_filepath, 'rb'))
+                 
+        
     def __len__(self):
         return len(self.qIdList)
 
@@ -276,15 +362,23 @@ class VqaDataset(Dataset):
         answer_encoded = self.qIdToEA[q_id]
         #answer_binary = index_to_binary(self.corpus_length, answer_encoded)
         question_length = torch.tensor([len(question_encoded)])
+      
+        img_idx = self.imgIdToidx[str(im_id)] 
+        with h5py.File(self.loaded_image_features) as image_features:
+            image_feature = image_features['image_features'][img_idx,:]
+            if self.model_type == 'coattention':
+                image_resize = torch.Tensor(image_feature).view(196)
+            else:
+                image_resize = torch.Tensor(image_feature).view(1024)
+
+        #im_type = self.image_filename_pattern.split('.')[-1]
+        #im_access_id = '0'*(12-len(str(im_id))) + str(im_id)
+        #image_file = self.image_dir + '/' + self.image_prefix + im_access_id + '.' + im_type
+        #loaded_img = pil_loader(image_file)
+        #if loaded_img == None:
+        #    print("Image not loaded correctly")
+        #    return exit(1)
         
-        im_type = self.image_filename_pattern.split('.')[-1]
-        im_access_id = '0'*(12-len(str(im_id))) + str(im_id)
-        image_file = self.image_dir + '/' + self.image_prefix + im_access_id + '.' + im_type
-        loaded_img = default_loader(image_file)
-        if loaded_img == None:
-            print("Image not loaded correctly")
-            return exit(1)
-        
-        image = self.transforms(loaded_img)
-        return {'question':question_output, 'image':image, 'answer':answer_encoded, 'question_length':question_length}
+        #image = self.transforms(loaded_img)
+        return {'question':question_output, 'image':image_resize, 'answer':answer_encoded, 'question_length':question_length}
     

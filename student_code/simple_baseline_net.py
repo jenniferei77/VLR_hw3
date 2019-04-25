@@ -16,19 +16,20 @@ class SimpleBaselineNet(nn.Module):
 
         #Word and Image Features:
         self.lin_word_net = nn.Linear(self.corpus_length, 1024)
-        self.image_net = GoogLeNet(num_classes=self.corpus_length, transform_input=True)
+#        self.image_net = GoogLeNet(num_classes=self.corpus_length, transform_input=True)
 
         #Classify:
         self.classifier = nn.Linear(2048, self.corpus_length)
 
-    def forward(self, image, question_encodings, question_lengths):
+    def forward(self, image_feature, question_encodings, question_lengths):
         # TODO
-        image = image.cuda(async=True)
+        #image = image.cuda(async=True)
         word_features = self.lin_word_net(question_encodings.cuda(async=True))
-        image_features = self.image_net(image)
-        if self.training:
-            image_features = image_features[-1]
-        full_features = torch.cat((word_features, image_features), dim=1)
+        #image_features = self.image_net(image)
+        #if self.training:
+        #    image_features = image_features[-1]
+        image_features = image_features.cuda(async=True)
+        full_features = torch.cat((word_features, image_feature), dim=1)
         
         score = self.classifier(full_features)
         return score

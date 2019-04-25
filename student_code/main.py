@@ -18,6 +18,11 @@ if __name__ == "__main__":
     parser.add_argument('--loaded_answer_corpus', type=str)
     parser.add_argument('--train_best_answers_filepath', type=str)
     parser.add_argument('--val_best_answers_filepath', type=str)
+    
+    parser.add_argument('--train_image_features_filepath', type=str)
+    parser.add_argument('--train_loaded_imgIdToidx_filepath', type=str)
+    parser.add_argument('--val_image_features_filepath', type=str)
+    parser.add_argument('--val_loaded_imgIdToidx_filepath', type=str)
 
     parser.add_argument('--batch_size', type=int, default=100)
     parser.add_argument('--num_epochs', type=int, default=100)
@@ -41,6 +46,10 @@ if __name__ == "__main__":
                                                 loaded_answer_corpus=args.loaded_answer_corpus,
                                                 train_best_answers_filepath=args.train_best_answers_filepath,
                                                 val_best_answers_filepath=args.val_best_answers_filepath,
+                                                train_image_features_filepath=args.train_image_features_filepath,
+                                                train_loaded_imgIdToidx_filepath=args.train_loaded_imgIdToidx_filepath,
+                                                val_image_features_filepath=args.val_image_features_filepath,
+                                                val_loaded_imgIdToidx_filepath=args.val_loaded_imgIdToidx_filepath,
                                                 batch_size=args.batch_size,
                                                 num_epochs=args.num_epochs,
                                                 num_data_loader_workers=args.num_data_loader_workers)

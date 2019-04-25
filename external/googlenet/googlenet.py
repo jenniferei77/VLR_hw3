@@ -35,10 +35,11 @@ def googlenet(pretrained=False, **kwargs):
 
 class GoogLeNet(nn.Module):
 
-    def __init__(self, num_classes=1000, aux_logits=True, transform_input=False, init_weights=True):
+    def __init__(self, num_classes=1000, aux_logits=True, transform_input=False, init_weights=True, coattention=False):
         super(GoogLeNet, self).__init__()
         self.aux_logits = aux_logits
         self.transform_input = transform_input
+        self.coattention = coattention
 
         self.conv1 = BasicConv2d(3, 64, kernel_size=7, stride=2, padding=3)
         self.maxpool1 = nn.MaxPool2d(3, stride=2, ceil_mode=True)
@@ -112,29 +113,32 @@ class GoogLeNet(nn.Module):
             aux1 = self.aux1(x)
         x = self.inception4b(x)
         # N x 512 x 14 x 14
-        x = self.inception4c(x)
+        output = self.inception4c(x)
         # N x 512 x 14 x 14
-        #x = self.inception4d(x)
+        x = self.inception4d(output)
         # N x 528 x 14 x 14
         if self.training and self.aux_logits:
             aux2 = self.aux2(x)
-        #x = self.inception4e(x)
+        x = self.inception4e(x)
         # N x 832 x 14 x 14
-        #x = self.maxpool4(x)
+        x = self.maxpool4(x)
         # N x 832 x 7 x 7
-        #x = self.inception5a(x)
+        x = self.inception5a(x)
         # N x 832 x 7 x 7
-        #x = self.inception5b(x)
+        x = self.inception5b(x)
         # N x 1024 x 7 x 7
-        #x = self.avgpool(x)
+        x = self.avgpool(x)
         # N x 1024 x 1 x 1
-        #x = x.view(x.size(0), -1)
+        x = x.view(x.size(0), -1)
         # N x 1024
-        #x = self.dropout(x)
+        x = self.dropout(x)
         #x = self.fc(x)
         # N x 1000 (num_classes)
+        if self.coattention == True:
+            return output
         if self.training and self.aux_logits:
-            return aux1, aux2, x
+            #return aux1, aux2, x
+            return x
         return x
 
 
