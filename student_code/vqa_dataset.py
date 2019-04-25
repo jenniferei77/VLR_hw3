@@ -363,13 +363,14 @@ class VqaDataset(Dataset):
         #answer_binary = index_to_binary(self.corpus_length, answer_encoded)
         question_length = torch.tensor([len(question_encoded)])
       
-        img_idx = self.imgIdToidx[str(im_id)] 
-        with h5py.File(self.loaded_image_features) as image_features:
-            image_feature = image_features['image_features'][img_idx,:]
-            if self.model_type == 'coattention':
-                image_resize = torch.Tensor(image_feature).view(196)
-            else:
-                image_resize = torch.Tensor(image_feature).view(1024)
+        img_idx = self.imgIdToidx[str(im_id)]
+        image_features = h5py.File(self.loaded_image_features, 'r') 
+        #with h5py.File(self.loaded_image_features) as image_features:
+        image_feature = image_features['image_features'][img_idx,:]
+        if self.model_type == 'coattention':
+            image_resize = torch.Tensor(image_feature).view(196)
+        else:
+            image_resize = torch.Tensor(image_feature).view(1024)
 
         #im_type = self.image_filename_pattern.split('.')[-1]
         #im_access_id = '0'*(12-len(str(im_id))) + str(im_id)

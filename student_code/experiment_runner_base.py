@@ -79,7 +79,7 @@ class ExperimentRunnerBase(object):
         np.random.shuffle(indices_train)
         train_indices = indices_train[:split_train]
         train_sampler = SubsetRandomSampler(train_indices)
-  
+ 
         self._train_dataset_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
         # If you want to, you can shuffle the validation dataset and only use a subset of it to speed up debugging
         self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
@@ -153,7 +153,6 @@ class ExperimentRunnerBase(object):
             #avg_loss = AverageMeter()
             avg_test_accuracy = AverageMeter()
             avg_train_acc = AverageMeter()
-            self._model.train()
             for batch_id, data in enumerate(self._train_dataset_loader):
                 data_time.update(time.time() - end)
 
@@ -162,6 +161,7 @@ class ExperimentRunnerBase(object):
                 answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
                 question_lengths = data['question_length'].type(torch.FloatTensor)
 
+                self._model.train()
                 current_step = epoch * num_batches + batch_id
                 # ============
                 # TODO: Run the model and get the ground truth answers that you'll pass to your optimizer

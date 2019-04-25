@@ -25,8 +25,6 @@ class CoattentionNetExperimentRunner(ExperimentRunnerBase):
                                    loaded_imgIdToidx_filepath=train_loaded_imgIdToidx_filepath,
                                    corpus_length=corpus_length,
                                    model_type='coattention')
-        pdb.set_trace()
-        train_dataset[0]
 
         val_dataset = VqaDataset(image_dir=test_image_dir,
                                  question_json_file_path=test_question_path,
@@ -50,9 +48,9 @@ class CoattentionNetExperimentRunner(ExperimentRunnerBase):
 
     def _calc_loss(self, predicted_answers, true_answer_ids):
         # TODO
-        predicted_answers = torch.max(predicted_answers, 1)[1].type(torch.FloatTensor)
+        #predicted_answers = torch.max(predicted_answers, 1)[1].type(torch.FloatTensor)
         true_answers = true_answer_ids.view(true_answer_ids.size()[0]).type(torch.FloatTensor).cuda(async=True)
-        loss = F.cross_entropy(predicted_answers, true_answers)
+        loss = F.cross_entropy(predicted_answers, true_answers.type(torch.LongTensor).cuda(async=True))
         return loss
 
     def _adjust_lr(self, optimizer, epoch):
