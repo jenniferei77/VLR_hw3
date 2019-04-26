@@ -13,6 +13,14 @@ import time
 import pdb
 import torch.nn as nn
 
+def softmax_mask(H):
+    H_max = torch.max(H, dim=1, keepdim=True)[0]
+    H_exp = torch.exp(H-H_max)
+    H_mask = H_exp * (H_exp != 1.000).type(torch.FloatTensor).cuda(async=True)
+    H_softmax = H_mask / torch.sum(H_mask, dim=1, keepdim=True)
+    return H_softmax
+
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -118,7 +126,7 @@ class ExperimentRunnerBase(object):
 
             predicted_answers = self._model(images, questions, question_lengths) 
 
-            predicts_bounded = F.softmax(predicted_answers, 1)
+            predicts_bounded = torch.softmax(predicted_answers, dim=1)
             predicted_max_indices = predicts_bounded.max(1)[1] # predicted answer word
             predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
 
@@ -161,14 +169,22 @@ class ExperimentRunnerBase(object):
                 answers = data['answer'].type(torch.FloatTensor).cuda(async=True)
                 question_lengths = data['question_length'].type(torch.FloatTensor)
 
-                self._model.train()
                 current_step = epoch * num_batches + batch_id
                 # ============
                 # TODO: Run the model and get the ground truth answers that you'll pass to your optimizer
                 # This logic should be generic; not specific to either the Simple Baseline or CoAttention.
+      
+                self._model.train()
                 predicted_answer = self._model(images, questions, question_lengths)
+ 
+                # Optimize the model according to the predictions
+                loss = self._calc_loss(predicted_answer, answers)
+                #avg_loss.update(loss.item())
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()     
                 # ============
-                predicts_bounded = F.softmax(predicted_answer, 1)
+                predicts_bounded = torch.softmax(predicted_answer, dim=1)
                 predicted_max_indices = predicts_bounded.max(1)[1] # predicted answer word
                 predicted_max_indices = predicted_max_indices.view(predicted_max_indices.size()[0], -1) # resize to Nx1
 
@@ -181,13 +197,7 @@ class ExperimentRunnerBase(object):
                 train_accuracy = (answer_indices == predicted_max_indices).sum() / answer_indices.shape[0]
                 avg_train_acc.update(train_accuracy)
 
-                # Optimize the model according to the predictions
-                loss = self._calc_loss(predicted_answer, answers)
-                #avg_loss.update(loss.item())
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()     
-         
+        
                 batch_time.update(time.time() - end)
                 end = time.time() 
                 if current_step % self._clip_freq == 0:

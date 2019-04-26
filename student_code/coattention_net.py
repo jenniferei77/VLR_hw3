@@ -8,6 +8,13 @@ import torch
 from external.googlenet.googlenet import GoogLeNet
 import pdb
 
+def softmax_mask(H):
+    H_max = torch.max(H, dim=1, keepdim=True)[0]
+    H_exp = torch.exp(H-H_max)
+    H_mask = H_exp * (H_exp != 1.000).type(torch.FloatTensor).cuda(async=True)
+    H_softmax = H_mask / torch.sum(H_mask, dim=1, keepdim=True)
+    return H_softmax
+
 class ParallelCoattention(nn.Module):
     def __init__(self, v_size, q_size, embed_size, batch_size):
         super(ParallelCoattention, self).__init__()
@@ -21,30 +28,40 @@ class ParallelCoattention(nn.Module):
         self.word_map = nn.Linear(embed_size, embed_size)
         self.image_map = nn.Linear(embed_size, embed_size)
 
-        self.Hv_map = nn.Linear(embed_size, embed_size)
-        self.Hq_map = nn.Linear(embed_size, embed_size)
+        init.xavier_uniform_(self.word_map.weight)
+        init.xavier_uniform_(self.image_map.weight)
 
-    def forward(self, Q, V):
+        self.Hv_map = nn.Linear(embed_size, 1)
+        self.Hq_map = nn.Linear(embed_size, 1)
+        #self.qhat_resize = nn.Linear(26, 196)
+
+        init.xavier_uniform_(self.Hv_map.weight)
+        init.xavier_uniform_(self.Hv_map.weight)
+
+
+    def forward(self, Q, V, question_lengths):
         #Q=Bx26x512
         #V=Bx196x512
         #Q_Wb = self.word_map(Q.view(self.batch_size, self.embed_size*self.q_size)) # Should be B x 26 x 512
-        Q_Wb = self.word_map(Q)
+        Q_Wb = self.word_map(Q) # B x 26 x 512
         Q_Wb_V = torch.matmul(Q_Wb, V.transpose(1,2)) # Should be B x 26 x 196
         C = torch.tanh(Q_Wb_V) # Should be B x 26 x 196
 
         WvV = self.image_map(V) # Should be B x 196 x 512
         Hv = torch.tanh(WvV + torch.matmul(Q_Wb.transpose(1,2), C).transpose(1,2)) # Should be B x 196 x 512 + (B x 512 x 26)(B x 26 x 196) = B x 196 x 512
         Hq = torch.tanh(Q_Wb + torch.matmul(C, WvV)) # Should be B x 512 x 26 + (B x 26 x 196)(B x 196 x 512) = B x 26 x 512
+        #Hv_resize = self.Hv_resize(Hv.transpose(1,2)).transpose(1,2)
+        wHv = self.Hv_map(Hv).squeeze(2) # Should be B x 196
+        wHq = self.Hq_map(Hq).squeeze(2) # Should be B x 26
+        av = softmax_mask(wHv).unsqueeze(2) # Should be B x 196 x 1
+        aq = softmax_mask(wHq).unsqueeze(2) # Should be B x 26 x 1
 
-        wHv = self.Hv_map(Hv) # Should be B x 196 x 512
-        wHq = self.Hq_map(Hq) # Should be B x 26 x 512
-        av = torch.softmax(wHv, dim=2) # Should be B x 196 x 512
-        aq = torch.softmax(wHq, dim=2) # Should be B x 26 x 512
-
-        v_hat = torch.sum((av * V), dim=1)
-        q_hat = torch.sum((aq * Q), dim=1)
-
-        return v_hat + q_hat
+        #v_hat = torch.sum((av * V), dim=2)
+        #q_hat = torch.sum((aq * Q), dim=2)
+        #q_hat_resize = self.qhat_resize(q_hat) #resize to be 196 x 512
+        v_hat = torch.matmul(av.transpose(1,2), V).squeeze(1) # B x 512
+        q_hat = torch.matmul(aq.transpose(1,2), Q).squeeze(1) # B x 512
+        return q_hat + v_hat
         
 '''
 class AlternatingCoattention(nn.Module):
@@ -82,7 +99,6 @@ class AlternatingCoattention(nn.Module):
          
     def forward(self, q, v):
         # TODO
-        pdb.set_trace()
         #q_dim = q.view(self.q_size, -1)
         #v_dim = v.view(self.v_size, -1)
         # Summarize question into a single vector
@@ -134,7 +150,7 @@ class CoattentionNet(nn.Module):
         self.batch_size = batch_size
 
         self.embedding = nn.Linear(corpus_length, embed_size)
-        self.image_embed = nn.Linear(196, 196*512)
+        #self.image_embed = nn.Linear(196, 196*512)
         self.uni_gram = nn.Sequential(
             nn.Conv1d(self.max_question_length, self.max_question_length, 1, padding=0),
             nn.Tanh()
@@ -150,13 +166,14 @@ class CoattentionNet(nn.Module):
         )
 
         self.lstm = nn.LSTM(input_size=512, hidden_size=512)
-        #self._init_weights(self.lstm.weight_ih_l0)
-        #self._init_weights(self.lstm.weight_hh_l0)
-        #self.lstm.bias_ih_l0.data.zero_()
-        #self.lstm.bias_hh_l0.data.zero_()
+        self._init_weights(self.lstm.weight_ih_l0)
+        self._init_weights(self.lstm.weight_hh_l0)
+        self.lstm.bias_ih_l0.data.zero_()
+        self.lstm.bias_hh_l0.data.zero_()
 
         init.xavier_uniform_(self.embedding.weight)
- 
+        
+        self.image_net = GoogLeNet(num_classes=corpus_length, transform_input=True, coattention=True) 
         self.attention_word = ParallelCoattention(v_size=196, 
                                                   q_size=max_question_length, 
                                                   embed_size=embed_size, 
@@ -180,9 +197,9 @@ class CoattentionNet(nn.Module):
         #                       self.max_question_length)
 
         self.encode_word = nn.Linear(512, 512)
-        self.encode_phrase = nn.Linear(1024, 1024)
-        self.encode_ques = nn.Linear(1536, 1536)
-        self.probs = nn.Linear(1536, 1000)
+        self.encode_phrase = nn.Linear(512*2, 512*2)
+        self.encode_ques = nn.Linear(512*3, 512*3)
+        self.probs = nn.Linear(512*3, corpus_length)
 
 
     def _init_weights(self, weight):
@@ -196,7 +213,6 @@ class CoattentionNet(nn.Module):
         # question_lengths = B x 1
         #Question Hierarchy
         word_embed = self.embedding(question_encoding.cuda(async=True))
-
         phrase_convs = []
         phrase_convs.append(self.uni_gram(word_embed))
         phrase_convs.append(self.bi_gram(word_embed))
@@ -216,17 +232,17 @@ class CoattentionNet(nn.Module):
         quest_embed, (_, _) = self.lstm(phrase_sorted.cuda(async=True))
          
         #Image Features
-        #image_embed = image_embed.view(image_embed.size()[0], image_embed.size()[1], -1).transpose(1,2)
-        # image_embed = B x 196
-        image_embed = self.image_embed(image_feature.cuda(async=True))
-        image_embed = image_embed.view(image_embed.size()[0], 196, 512) # Reshape to B x 196 x 512
-        att_word = self.attention_word(word_embed, image_embed)
-        att_phrase = self.attention_phrase(phrase_embed, image_embed)
-        att_sentence = self.attention_sentence(quest_embed, image_embed)
+        image_embed = self.image_net(image_feature.cuda(async=True))
+        image_embed = image_embed.view(image_embed.size()[0], image_embed.size()[1], -1).transpose(1,2)
+        # image_embed = B x 196 x 512
+        #image_embed = self.image_embed(image_feature.cuda(async=True))
+        #image_embed = image_embed.view(image_embed.size()[0], 196, 512) # Reshape to B x 196 x 512
+        att_word = self.attention_word(word_embed, image_embed, question_lengths) # Shape is B x 26
+        att_phrase = self.attention_phrase(phrase_embed, image_embed, question_lengths) # Shape is B x 26
+        att_sentence = self.attention_sentence(quest_embed, image_embed, question_lengths) # Shape is B x 26
         #hidden_word = self.tanh_word(self.attention_word.weight * (q_att_word + v_att_word))
         #hidden_phrase = self.tanh_phrase(self.attention_phrase.weight * torch.cat((q_att_phrase + v_att_phrase), hidden_word))
         #hidden_ques = self.tanh_sent(self.attention_sentence.weight * torch.cat((q_att_sentence + v_att_sentence), hidden_phrase))
-         
         hidden_word = self.encode_word(att_word)
         hidden_phrase_input = torch.cat((att_phrase, hidden_word), dim=1)
         hidden_phrase = self.encode_phrase(hidden_phrase_input)

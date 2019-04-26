@@ -364,22 +364,21 @@ class VqaDataset(Dataset):
         question_length = torch.tensor([len(question_encoded)])
       
         img_idx = self.imgIdToidx[str(im_id)]
-        image_features = h5py.File(self.loaded_image_features, 'r') 
-        #with h5py.File(self.loaded_image_features) as image_features:
-        image_feature = image_features['image_features'][img_idx,:]
-        if self.model_type == 'coattention':
-            image_resize = torch.Tensor(image_feature).view(196)
-        else:
-            image_resize = torch.Tensor(image_feature).view(1024)
+        #image_features = h5py.File(self.loaded_image_features, 'r') 
+        #image_feature = image_features['image_features'][img_idx,:]
+        #if self.model_type == 'coattention':
+        #    image_resize = torch.Tensor(image_feature).view(196)
+        #else:
+        #    image_resize = torch.Tensor(image_feature).view(1024)
 
-        #im_type = self.image_filename_pattern.split('.')[-1]
-        #im_access_id = '0'*(12-len(str(im_id))) + str(im_id)
-        #image_file = self.image_dir + '/' + self.image_prefix + im_access_id + '.' + im_type
-        #loaded_img = pil_loader(image_file)
-        #if loaded_img == None:
-        #    print("Image not loaded correctly")
-        #    return exit(1)
+        im_type = self.image_filename_pattern.split('.')[-1]
+        im_access_id = '0'*(12-len(str(im_id))) + str(im_id)
+        image_file = self.image_dir + '/' + self.image_prefix + im_access_id + '.' + im_type
+        loaded_img = pil_loader(image_file)
+        if loaded_img == None:
+            print("Image not loaded correctly")
+            return exit(1)
         
-        #image = self.transforms(loaded_img)
+        image_resize = self.transforms(loaded_img)
         return {'question':question_output, 'image':image_resize, 'answer':answer_encoded, 'question_length':question_length}
     
