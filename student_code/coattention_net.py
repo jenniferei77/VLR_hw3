@@ -53,8 +53,10 @@ class ParallelCoattention(nn.Module):
         #Hv_resize = self.Hv_resize(Hv.transpose(1,2)).transpose(1,2)
         wHv = self.Hv_map(Hv).squeeze(2) # Should be B x 196
         wHq = self.Hq_map(Hq).squeeze(2) # Should be B x 26
-        av = softmax_mask(wHv).unsqueeze(2) # Should be B x 196 x 1
-        aq = softmax_mask(wHq).unsqueeze(2) # Should be B x 26 x 1
+        #av = softmax_mask(wHv).unsqueeze(2) # Should be B x 196 x 1
+        #aq = softmax_mask(wHq).unsqueeze(2) # Should be B x 26 x 1
+        av = torch.softmax(wHv, dim=1).unsqueeze(2)
+        aq = torch.softmax(wHq, dim=1).unsqueeze(2)
 
         #v_hat = torch.sum((av * V), dim=2)
         #q_hat = torch.sum((aq * Q), dim=2)

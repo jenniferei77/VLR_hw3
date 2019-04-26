@@ -88,7 +88,7 @@ class ExperimentRunnerBase(object):
         train_indices = indices_train[:split_train]
         train_sampler = SubsetRandomSampler(train_indices)
  
-        self._train_dataset_loader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
+        self._train_dataset_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=num_data_loader_workers)
         # If you want to, you can shuffle the validation dataset and only use a subset of it to speed up debugging
         self._val_dataset_loader = DataLoader(val_dataset, sampler=val_sampler, batch_size=batch_size, num_workers=num_data_loader_workers)
         self._date_time = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')

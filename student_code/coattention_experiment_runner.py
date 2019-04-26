@@ -41,7 +41,7 @@ class CoattentionNetExperimentRunner(ExperimentRunnerBase):
         self._model = CoattentionNet(corpus_length=len(train_dataset.question_corpus), batch_size=batch_size)
         self._model.cuda()
         
-        self._optimizer = torch.optim.RMSprop(self._model.parameters(), lr=4e-4, momentum=0.99, weight_decay=1e-8)
+        self._optimizer = torch.optim.SGD(self._model.parameters(), lr=0.001, momentum=0.9, weight_decay=1e-8)
 
         super().__init__(train_dataset, val_dataset, self._model, self._optimizer, batch_size, num_epochs,
                          num_data_loader_workers)
